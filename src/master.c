@@ -7,6 +7,9 @@
 
 // Implementa a logica principal de aceitar conexoes do cliente.
 // É aqui a parte central da arquitetira multi-thread do servidor.
+#DEFINE PORT 8080
+#define MAX_QUEUE_SIZE 1024
+#define MAX_WORKERS 4
 
 volatile sig_atomic_t keep_running = 1;
 
@@ -94,15 +97,20 @@ void connection_handler(shared_data_t* data, semaphores_t* sems){
 
 
 // Threads workers (consumers)
-void* worker_thread(shared_data_t* data, semaphores_t* sems){
-	// Worker process dequeues connections (consumer)
+void* worker_thread(void* arg){
+	thread_args_t* args = (thread_args_t*)arg; //Casts the argument to the correct type
+	shared_data_t* data = targs->data; // Access the shared data
+	semaphores_t* sems = targs->sems; // Access the semaphores
 
-	while(keep_running){
-		int client_fd = dequeue_connection(data, sems);
-		handle_connection(client_fd);
+
+	while(1){
+		int client_fd = dequeue_connection(data, sems); //Dequeue a connection
+		if (client_fd == -1){ //If there are no more connections, exit the thread
+			break;
+		}
+		handle_connection(client_fd); //Handle the connection
 	}
 	return NULL;
-
 }
 
-}
+
