@@ -26,6 +26,7 @@ shared_data_t* create_shared_memory() {
     memset(data, 0, sizeof(shared_data_t));
     return data;
 }
+
 void destroy_shared_memory(shared_data_t* data) {
     munmap(data, sizeof(shared_data_t));
     shm_unlink(SHM_NAME);

@@ -7,6 +7,7 @@ typedef struct {
     char path[512];
     char version[16];
 } http_request_t;
+
 int parse_http_request(const char* buffer, http_request_t* req) {
     char* line_end = strstr(buffer, "\r\n");
     if (!line_end) return -1;

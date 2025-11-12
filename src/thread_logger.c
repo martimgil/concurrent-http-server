@@ -1,8 +1,7 @@
 // Implementa um loggin thread-safe para requests HTTP
 // Usa um semaforo POSIX para garantir que apenas uma thread é escrita no access.log de cada vez.
 
-void log_request(sem_t* log_sem, const char* client_ip, const char* method,
-const char* path, int status, size_t bytes) {
+void log_request(sem_t* log_sem, const char* client_ip, const char* method, const char* path, int status, size_t bytes) {
     time_t now = time(NULL);
     struct tm* tm_info = localtime(&now);
     char timestamp[64];

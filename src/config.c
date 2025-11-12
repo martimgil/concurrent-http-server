@@ -21,7 +21,7 @@ int load_config(const char* filename, server_config_t* config) {
                 config->threads_per_worker = atoi(value);
             else if (strcmp(key, "DOCUMENT_ROOT") == 0)
                 strncpy(config->document_root, value, sizeof(config-
-               >document_root));
+             >document_root));
             // Add other config parameters...
         }
     }
