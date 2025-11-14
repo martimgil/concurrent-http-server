@@ -4,12 +4,21 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <signal.h>
+#include <pthread.h>
+#include <semaphore.h>
+#include "semaphores.h"
+#include "shared_mem.h"
 
 // Implementa a logica principal de aceitar conexoes do cliente.
 // É aqui a parte central da arquitetira multi-thread do servidor.
-#DEFINE PORT 8080
-#define MAX_QUEUE_SIZE 1024
+
+#define PORT 8080
 #define MAX_WORKERS 4
+
+typedef struct {
+    shared_data_t* data;
+    semaphores_t* sems;
+} thread_args_t;
 
 volatile sig_atomic_t keep_running = 1;
 
@@ -42,8 +51,7 @@ int create_server_socket(int port) {
     return sockfd;
 }
 
-void enqueue_connection(shared_data_t* data, semaphores_t* sems, int
-client_fd) {
+void enqueue_connection(shared_data_t* data, semaphores_t* sems, int client_fd) {
     sem_wait(sems->empty_slots);
     sem_wait(sems->queue_mutex);
 
@@ -55,39 +63,39 @@ client_fd) {
     sem_post(sems->filled_slots);
 }
 
-int dequeue_connection(shared_data_t* data, semaphores_t* sems){
-	// Semaphores wait
-	sem_wait(sems->filled_slots); // Wait until there is a connection in the queue
-	sem_wait(sems->queue_mutex); // Wait until the queue mutex is free
+int dequeue_connection(shared_data_t* data, semaphores_t* sems) {
+    // Semaphores wait
+    sem_wait(sems->filled_slots); // Wait until there is a connection in the queue
+    sem_wait(sems->queue_mutex); // Wait until the queue mutex is free
 
-	int client_fd = data->queue.sockets[data->queue.front]; // Get the front connection
+    int client_fd = data->queue.sockets[data->queue.front]; // Get the front connection
 
-	data->queue.front = (data->queue.front + 1) % MAX_QUEUE_SIZE; // Move front pointer
-	data->queue.count--; // Decrement queue size
+    data->queue.front = (data->queue.front + 1) % MAX_QUEUE_SIZE; // Move front pointer
+    data->queue.count--; // Decrement queue size
 
-	sem_post(sems->queue_mutex); // Release queue mutex
-	sem_post(sems->empty_slots); // Release empty slots semaphore
+    sem_post(sems->queue_mutex); // Release queue mutex
+    sem_post(sems->empty_slots); // Release empty slots semaphore
 
-	return client_fd;
+    return client_fd;
 }
 
 // Feature 1: Connection queue
 
-void connection_handler(shared_data_t* data, semaphores_t* sems){
+void connection_handler(shared_data_t* data, semaphores_t* sems) {
     //Master process accpts connections (producer)
 
     //Create a socket and listen for incoming connections
     int server_fd = create_server_socket(8080);
-    if(server_fd <0){
-        perror("Failed to create server socket");}
+    if (server_fd < 0) {
+        perror("Failed to create server socket");
         return;
     }
 
-    while(keep_running){
+    while (keep_running) {
         int client_fd = accept(server_fd, NULL, NULL);
         if (client_fd < 0) {
             perror("Failed to accept connection");
-        continue;
+            continue;
         }
         enqueue_connection(data, sems, client_fd);
     }
@@ -95,22 +103,75 @@ void connection_handler(shared_data_t* data, semaphores_t* sems){
     close(server_fd);
 }
 
-
-// Threads workers (consumers)
-void* worker_thread(void* arg){
-	thread_args_t* args = (thread_args_t*)arg; //Casts the argument to the correct type
-	shared_data_t* data = targs->data; // Access the shared data
-	semaphores_t* sems = targs->sems; // Access the semaphores
-
-
-	while(1){
-		int client_fd = dequeue_connection(data, sems); //Dequeue a connection
-		if (client_fd == -1){ //If there are no more connections, exit the thread
-			break;
-		}
-		handle_connection(client_fd); //Handle the connection
-	}
-	return NULL;
+void handle_connection(int client_fd) {
+    // Simple example: read data from client and echo back
+    char buffer[1024];
+    ssize_t bytes_read = read(client_fd, buffer, sizeof(buffer) - 1);
+    if (bytes_read > 0) {
+        buffer[bytes_read] = '\0';
+        write(client_fd, buffer, bytes_read);
+    }
+    close(client_fd);
 }
 
+// Threads workers (consumers)
+void* worker_thread(void* arg) {
+    thread_args_t* args = (thread_args_t*)arg; //Casts the argument to the correct type
+    shared_data_t* data = args->data; // Access the shared data
+    semaphores_t* sems = args->sems; // Access the semaphores
 
+    while (1) {
+        int client_fd = dequeue_connection(data, sems); //Dequeue a connection
+        if (client_fd == -1) { //If there are no more connections, exit the thread
+            break;
+        }
+        handle_connection(client_fd); //Handle the connection
+    }
+    return NULL;
+}
+
+int main() {
+    shared_data_t* data = malloc(sizeof(shared_data_t));
+    semaphores_t sems;
+    sem_t empty_slots, filled_slots, queue_mutex;
+    pthread_t workers[MAX_WORKERS];
+    thread_args_t args = {data, &sems};
+
+    sems.empty_slots = &empty_slots;
+    sems.filled_slots = &filled_slots;
+    sems.queue_mutex = &queue_mutex;
+
+    //Initialize semaphores
+    sem_init(sems.empty_slots, 0, MAX_QUEUE_SIZE);
+    sem_init(sems.filled_slots, 0, 0);
+    sem_init(sems.queue_mutex, 0, 1);
+
+    //Initialize shared memory
+    data->queue.front = 0;
+    data->queue.rear = 0;
+    data->queue.count = 0;
+
+    // Configurate signal
+    signal(SIGINT, signal_handler);
+
+    // Create threads worker
+    for (int i = 0; i < MAX_WORKERS; i++) {
+        pthread_create(&workers[i], NULL, worker_thread, &args);
+    }
+
+    //Execute connection handler
+    connection_handler(data, &sems);
+
+    //Wait for all workers to finish
+    for (int i = 0; i < MAX_WORKERS; i++) {
+        pthread_join(workers[i], NULL);
+    }
+
+    //Cleanup semaphores
+    sem_destroy(sems.empty_slots);
+    sem_destroy(sems.filled_slots);
+    sem_destroy(sems.queue_mutex);
+    free(data);
+
+    return 0;
+}
