@@ -16,6 +16,7 @@ int init_semaphores(semaphores_t* sems, int queue_size) {
 }
 
 void destroy_semaphores(semaphores_t* sems) {
+
     sem_close(sems->empty_slots);
     sem_close(sems->filled_slots);
     sem_close(sems->queue_mutex);

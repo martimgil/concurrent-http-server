@@ -8,12 +8,16 @@
 #include <semaphore.h>
 #include "semaphores.h"
 #include "shared_mem.h"
+#include <sys/shm.h>
+#include <errno.h>
+#include <string.h>
 
 // Implementa a logica principal de aceitar conexoes do cliente.
 // É aqui a parte central da arquitetira multi-thread do servidor.
 
 #define PORT 8080
 #define MAX_WORKERS 4
+#define MAX_QUEUE_SIZE 100
 
 typedef struct {
     shared_data_t* data;
@@ -51,7 +55,24 @@ int create_server_socket(int port) {
     return sockfd;
 }
 
+static void reject_with_503(int client_fd) {
+    const char* response = "HTTP/1.1 503 Service Unavailable\r\n\r\n";
+    ssize_t ignored = write(client_fd, response, strlen(response));
+    (void)ignored;
+    close(client_fd);
+}
+
 void enqueue_connection(shared_data_t* data, semaphores_t* sems, int client_fd) {
+    if (sem_trywait(sems->empty_slots) != 0) {
+        if (errno == EAGAIN) { // When semaphore couldn't decrement because the queue is full
+            reject_with_503(client_fd);
+            return;
+        } else {
+            reject_with_503(client_fd);
+            return;
+        }
+    }
+
     sem_wait(sems->empty_slots);
     sem_wait(sems->queue_mutex);
 
@@ -80,7 +101,6 @@ int dequeue_connection(shared_data_t* data, semaphores_t* sems) {
 }
 
 // Feature 1: Connection queue
-
 void connection_handler(shared_data_t* data, semaphores_t* sems) {
     //Master process accpts connections (producer)
 
@@ -130,13 +150,28 @@ void* worker_thread(void* arg) {
     return NULL;
 }
 
-int main() {
-    shared_data_t* data = malloc(sizeof(shared_data_t));
-    semaphores_t sems;
-    sem_t empty_slots, filled_slots, queue_mutex;
-    pthread_t workers[MAX_WORKERS];
-    thread_args_t args = {data, &sems};
 
+int main() {
+    //Create shared memory
+    key_t key = ftok("master.c", 'R'); //Unique key for memory
+    int shmid = shmget(key, sizeof(shared_data_t), IPC_CREAT | 0666);
+
+    if (shmid < 0) {
+        perror("Failed to create shared memory");
+        exit(1);
+    }
+
+    // Shared Data
+    shared_data_t* data = (shared_data_t*)shmat(shmid, NULL, 0);
+
+    if (data == (shared_data_t*) -1) {
+        perror("shmat failed");
+        exit(1);
+    }
+
+    // Declare semaphores
+    sem_t empty_slots, filled_slots, queue_mutex;
+    semaphores_t sems;
     sems.empty_slots = &empty_slots;
     sems.filled_slots = &filled_slots;
     sems.queue_mutex = &queue_mutex;
@@ -146,15 +181,21 @@ int main() {
     sem_init(sems.filled_slots, 0, 0);
     sem_init(sems.queue_mutex, 0, 1);
 
-    //Initialize shared memory
+    //Initialize shared memory queue
     data->queue.front = 0;
     data->queue.rear = 0;
     data->queue.count = 0;
 
-    // Configurate signal
-    signal(SIGINT, signal_handler);
 
-    // Create threads worker
+    // Declare thread arguments
+    thread_args_t args;
+    args.data = data;
+    args.sems = &sems;
+
+    //Declare worker thread
+    pthread_t workers[MAX_WORKERS];
+
+    // Create worker threads
     for (int i = 0; i < MAX_WORKERS; i++) {
         pthread_create(&workers[i], NULL, worker_thread, &args);
     }
@@ -171,7 +212,11 @@ int main() {
     sem_destroy(sems.empty_slots);
     sem_destroy(sems.filled_slots);
     sem_destroy(sems.queue_mutex);
-    free(data);
+
+
+    //Remove shared memory
+    shmdt(data);
+    shmctl(shmid, IPC_RMID, NULL);
 
     return 0;
 }
