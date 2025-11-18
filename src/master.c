@@ -8,7 +8,6 @@
 #include <semaphore.h>
 #include "semaphores.h"
 #include "shared_mem.h"
-#include <sys/shm.h>
 #include <errno.h>
 #include <string.h>
 
@@ -27,27 +26,38 @@ typedef struct {
 volatile sig_atomic_t keep_running = 1;
 
 void signal_handler(int signum) {
+    (void)signum; // Mark as intentionally unused
     keep_running = 0;
 }
 
 int create_server_socket(int port) {
     int sockfd = socket(AF_INET, SOCK_STREAM, 0);
-    if (sockfd < 0) return -1;
+    if (sockfd < 0) {
+        perror("socket creation failed");
+        return -1;
+    }
 
     int opt = 1;
-    setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
+    if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) < 0) {
+        perror("setsockopt failed");
+        close(sockfd);
+        return -1;
+    }
 
     struct sockaddr_in addr;
+    memset(&addr, 0, sizeof(addr));
     addr.sin_family = AF_INET;
-    addr.sin_addr.s_addr = INADDR_ANY;
+    addr.sin_addr.s_addr = htonl(INADDR_ANY);
     addr.sin_port = htons(port);
 
     if (bind(sockfd, (struct sockaddr*)&addr, sizeof(addr)) < 0) {
+        perror("bind failed");
         close(sockfd);
         return -1;
     }
 
     if (listen(sockfd, 128) < 0) {
+        perror("listen failed");
         close(sockfd);
         return -1;
     }
@@ -56,9 +66,11 @@ int create_server_socket(int port) {
 }
 
 static void reject_with_503(int client_fd) {
-    const char* response = "HTTP/1.1 503 Service Unavailable\r\n\r\n";
-    ssize_t ignored = write(client_fd, response, strlen(response));
-    (void)ignored;
+    const char* response = "HTTP/1.1 503 Service Unavailable\r\nContent-Length: 0\r\nConnection: close\r\n\r\n";
+    ssize_t sent = write(client_fd, response, strlen(response));
+    if (sent < 0) {
+        perror("Failed to send 503 response");
+    }
     close(client_fd);
 }
 
@@ -73,9 +85,9 @@ void enqueue_connection(shared_data_t* data, semaphores_t* sems, int client_fd) 
         }
     }
 
-    sem_wait(sems->empty_slots);
     sem_wait(sems->queue_mutex);
 
+    // Add to queue
     data->queue.sockets[data->queue.rear] = client_fd;
     data->queue.rear = (data->queue.rear + 1) % MAX_QUEUE_SIZE;
     data->queue.count++;
@@ -114,6 +126,10 @@ void connection_handler(shared_data_t* data, semaphores_t* sems) {
     while (keep_running) {
         int client_fd = accept(server_fd, NULL, NULL);
         if (client_fd < 0) {
+            if (errno == EINTR && !keep_running) {
+                // Interrupted by signal, exit gracefully
+                break;
+            }
             perror("Failed to accept connection");
             continue;
         }
@@ -123,49 +139,59 @@ void connection_handler(shared_data_t* data, semaphores_t* sems) {
     close(server_fd);
 }
 
-void handle_connection(int client_fd) {
-    // Simple example: read data from client and echo back
-    char buffer[1024];
-    ssize_t bytes_read = read(client_fd, buffer, sizeof(buffer) - 1);
-    if (bytes_read > 0) {
-        buffer[bytes_read] = '\0';
-        write(client_fd, buffer, bytes_read);
-    }
-    close(client_fd);
-}
-
 // Threads workers (consumers)
 void* worker_thread(void* arg) {
-    thread_args_t* args = (thread_args_t*)arg; //Casts the argument to the correct type
-    shared_data_t* data = args->data; // Access the shared data
-    semaphores_t* sems = args->sems; // Access the semaphores
+    thread_args_t* args = (thread_args_t*)arg;
+    shared_data_t* data = args->data;
+    semaphores_t* sems = args->sems;
 
-    while (1) {
+    while (keep_running) {
         int client_fd = dequeue_connection(data, sems); //Dequeue a connection
-        if (client_fd == -1) { //If there are no more connections, exit the thread
+        if (client_fd < 0) { //If there are no more connections, exit the thread
             break;
         }
-        handle_connection(client_fd); //Handle the connection
+
+        // Read HTTP request from client
+        char buffer[4096];
+        ssize_t bytes_read = read(client_fd, buffer, sizeof(buffer) - 1);
+        if (bytes_read > 0) {
+            buffer[bytes_read] = '\0';
+            // Send HTTP response
+            const char* body = "<h1>OK</h1>\r\n";
+            int body_len = strlen(body);
+            char response[1024];
+            int response_len = snprintf(response, sizeof(response),
+                "HTTP/1.1 200 OK\r\n"
+                "Content-Type: text/html\r\n"
+                "Content-Length: %d\r\n"
+                "Connection: close\r\n"
+                "\r\n",
+                body_len);
+
+            ssize_t bytes_written = write(client_fd, response, response_len);
+            if (bytes_written > 0) {
+                bytes_written = write(client_fd, body, body_len);
+                if (bytes_written < 0) {
+                    perror("Failed to write body to client");
+                }
+            } else {
+                perror("Failed to write header to client");
+            }
+        } else if (bytes_read < 0) {
+            perror("Failed to read from client");
+        }
+
+        close(client_fd);
     }
+
     return NULL;
 }
 
-
 int main() {
     //Create shared memory
-    key_t key = ftok("master.c", 'R'); //Unique key for memory
-    int shmid = shmget(key, sizeof(shared_data_t), IPC_CREAT | 0666);
-
-    if (shmid < 0) {
+    shared_data_t* data = create_shared_memory();
+    if (data == NULL) {
         perror("Failed to create shared memory");
-        exit(1);
-    }
-
-    // Shared Data
-    shared_data_t* data = (shared_data_t*)shmat(shmid, NULL, 0);
-
-    if (data == (shared_data_t*) -1) {
-        perror("shmat failed");
         exit(1);
     }
 
@@ -181,11 +207,9 @@ int main() {
     sem_init(sems.filled_slots, 0, 0);
     sem_init(sems.queue_mutex, 0, 1);
 
-    //Initialize shared memory queue
-    data->queue.front = 0;
-    data->queue.rear = 0;
-    data->queue.count = 0;
-
+    // Install signal handler for graceful shutdown
+    signal(SIGINT, signal_handler);
+    signal(SIGTERM, signal_handler);
 
     // Declare thread arguments
     thread_args_t args;
@@ -213,10 +237,9 @@ int main() {
     sem_destroy(sems.filled_slots);
     sem_destroy(sems.queue_mutex);
 
-
     //Remove shared memory
-    shmdt(data);
-    shmctl(shmid, IPC_RMID, NULL);
+    destroy_shared_memory(data);
 
     return 0;
 }
+

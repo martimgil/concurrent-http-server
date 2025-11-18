@@ -16,15 +16,17 @@ int init_semaphores(semaphores_t* sems, int queue_size) {
 }
 
 void destroy_semaphores(semaphores_t* sems) {
+    if (!sems) return;
 
     sem_close(sems->empty_slots);
     sem_close(sems->filled_slots);
     sem_close(sems->queue_mutex);
     sem_close(sems->stats_mutex);
-    _close(sems->log_mutex);
+    sem_close(sems->log_mutex);
 
     sem_unlink("/ws_empty");
     sem_unlink("/ws_filled");
     sem_unlink("/ws_queue_mutex");
     sem_unlink("/ws_stats_mutex");
+    sem_unlink("/ws_log_mutex");
 }

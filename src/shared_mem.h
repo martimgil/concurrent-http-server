@@ -1,6 +1,5 @@
 // Define as estrutura de dados e os prototipos das funções para gerir a memória compartinhada
 
-
 #ifndef SHARED_MEM_H
 #define SHARED_MEM_H
 #define MAX_QUEUE_SIZE 100

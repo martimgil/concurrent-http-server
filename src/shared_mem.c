@@ -28,6 +28,8 @@ shared_data_t* create_shared_memory() {
 }
 
 void destroy_shared_memory(shared_data_t* data) {
-    munmap(data, sizeof(shared_data_t));
+    if (data != NULL && data != MAP_FAILED) {
+        munmap(data, sizeof(shared_data_t));
+    }
     shm_unlink(SHM_NAME);
 }
