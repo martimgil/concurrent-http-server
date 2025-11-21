@@ -11,6 +11,8 @@ typedef struct {
     long status_500;
     int active_connections;
 } server_stats_t;
+
+// FEATURE 1: Bounded circular buffer in shared memory (size: 100 connections)
 typedef struct {
     int sockets[MAX_QUEUE_SIZE];
     int front;

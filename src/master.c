@@ -11,9 +11,10 @@
 #include <errno.h>
 #include <string.h>
 
-// Implementa a logica principal de aceitar conexoes do cliente.
-// É aqui a parte central da arquitetira multi-thread do servidor.
 
+// FEATURE 1: Connection Queue (Producer-Consumer) - Estruturas e constantes
+// - Bounded circular buffer in shared memory (size: 100 connections)
+// - Use semaphores: empty_slots, filled_slots, mutex
 #define PORT 8080
 #define MAX_WORKERS 4
 #define MAX_QUEUE_SIZE 100
@@ -65,6 +66,7 @@ int create_server_socket(int port) {
     return sockfd;
 }
 
+// FEATURE 1: Handle queue full scenario gracefully (reject with 503 Service Unavailable)
 static void reject_with_503(int client_fd) {
     const char* response = "HTTP/1.1 503 Service Unavailable\r\nContent-Length: 0\r\nConnection: close\r\n\r\n";
     ssize_t sent = write(client_fd, response, strlen(response));
@@ -74,6 +76,7 @@ static void reject_with_503(int client_fd) {
     close(client_fd);
 }
 
+// FEATURE 1: Master process accepts connections (producer) - Enqueue connection
 void enqueue_connection(shared_data_t* data, semaphores_t* sems, int client_fd) {
     if (sem_trywait(sems->empty_slots) != 0) {
         if (errno == EAGAIN) { // When semaphore couldn't decrement because the queue is full
@@ -96,6 +99,7 @@ void enqueue_connection(shared_data_t* data, semaphores_t* sems, int client_fd) 
     sem_post(sems->filled_slots);
 }
 
+// FEATURE 1: Worker threads dequeue and process connections (consumers) - Dequeue connection
 int dequeue_connection(shared_data_t* data, semaphores_t* sems) {
     // Semaphores wait
     sem_wait(sems->filled_slots); // Wait until there is a connection in the queue
@@ -112,7 +116,7 @@ int dequeue_connection(shared_data_t* data, semaphores_t* sems) {
     return client_fd;
 }
 
-// Feature 1: Connection queue
+// FEATURE 1: Master process accepts connections (producer) - Connection handler loop
 void connection_handler(shared_data_t* data, semaphores_t* sems) {
     //Master process accpts connections (producer)
 
@@ -139,7 +143,7 @@ void connection_handler(shared_data_t* data, semaphores_t* sems) {
     close(server_fd);
 }
 
-// Threads workers (consumers)
+// FEATURE 1: Worker threads dequeue and process connections (consumers) - Worker thread function
 void* worker_thread(void* arg) {
     thread_args_t* args = (thread_args_t*)arg;
     shared_data_t* data = args->data;
@@ -195,6 +199,7 @@ int main() {
         exit(1);
     }
 
+    // FEATURE 1: Use semaphores: empty_slots, filled_slots, mutex - Declare and initialize semaphores
     // Declare semaphores
     sem_t empty_slots, filled_slots, queue_mutex;
     semaphores_t sems;
@@ -216,6 +221,7 @@ int main() {
     args.data = data;
     args.sems = &sems;
 
+    // FEATURE 1: Worker threads dequeue and process connections (consumers) - Create worker threads
     //Declare worker thread
     pthread_t workers[MAX_WORKERS];
 
@@ -224,6 +230,7 @@ int main() {
         pthread_create(&workers[i], NULL, worker_thread, &args);
     }
 
+    // FEATURE 1: Master process accepts connections (producer) - Execute connection handler
     //Execute connection handler
     connection_handler(data, &sems);
 
