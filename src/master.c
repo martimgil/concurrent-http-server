@@ -15,12 +15,113 @@
 #define PORT 8080 
 #define NUM_WORKERS 4
 
+// Global variable to control the main loop
 volatile sig_atomic_t keep_running = 1;
 
+
+// Signal handler to gracefully shut down the server
 void signal_handler(int signum) {
     keep_running = 0;
 }
 
+// ###################################################################################################################
+// Sending file descriptors over UNIX sockets
+// https://gist.github.com/domfarolino/4293951bd95082125f2b9931cab1de40
+// ###################################################################################################################
+
+
+// Function to send a file descriptor over a Unix domain socket
+// socket -> Socket file descriptor
+// fd_to_send -> File descriptor to send
+
+static int send_fd(int socket, int fd_to_send){
+    // msghdr -> Message header structure
+    // msg -> Message to be sent
+    // {0} -> Initialize all fields to zero
+    struct msghdr msg = {0}; 
+    
+    // buf -> Buffer to hold a single byte (required for sendmsg)
+    char buf[1];
+
+    // iovec -> I/O vector structure
+    // io -> I/O vector for the message
+    // .iov_base -> Pointer to the buffer
+    // .iov_len -> Length of the buffer
+    struct iovec io = { .iov_base = buf, .iov_len = 1 };
+
+    // Union to hold control message
+    union {
+
+        // buf -> Buffer for control message
+        // CMSG_SPACE -> Macro to calculate space needed for control message
+        // sizeof(fd_to_send) -> Size of the file descriptor
+        char buf[CMSG_SPACE(sizeof(fd_to_send))];
+
+        // align -> cmsghdr structure for alignment
+        // cmsghdr -> Control message header structure
+        struct cmsghdr align;
+    } u; // u -> Union to hold control message
+
+
+    // Set up the message header
+    // msg.msg_iov -> Pointer to the I/O vector
+    // &io -> Address of the I/O vector
+    msg.msg_iov = &io;
+
+    // msg.msg_iovlen -> Number of I/O vectors
+    // 1 -> Number of I/O vectors
+    msg.msg_iovlen = 1;
+
+    // msg.msg_control -> Pointer to control message buffer
+    // u.buf -> Address of the control message buffer
+    msg.msg_control = u.buf;
+
+    // msg.msg_controllen -> Length of control message buffer
+    // sizeof(u.buf) -> Size of the control message buffer
+    msg.msg_controllen = sizeof(u.buf);
+
+
+    // cmsghdr -> Control message header
+    // CMSG_FIRSTHDR -> Macro to get the first control message header
+    // &msg -> Address of the message header
+    struct cmsghdr* cmsg = CMSG_FIRSTHDR(&msg);
+
+    // Set up the control message header
+    // cmsg->cmsg_level -> Level of the control message
+    // SOL_SOCKET -> Socket level
+    cmsg->cmsg_level = SOL_SOCKET;
+
+    // cmsg->cmsg_type -> Type of the control message
+    // SCM_RIGHTS -> Send file descriptor
+    cmsg->cmsg_type = SCM_RIGHTS;
+
+    // cmsg->cmsg_len -> Length of the control message
+    // CMSG_LEN -> Macro to calculate length of control message
+    // sizeof(fd_to_send) -> Size of the file descriptor
+    cmsg->cmsg_len = CMSG_LEN(sizeof(fd_to_send));
+
+
+    // Copy the file descriptor to the control message data
+    // CMSG_DATA -> Macro to get pointer to control message data
+    // (int*) -> Cast to integer pointer
+    // fd_to_send -> File descriptor to send
+    *((int*) CMSG_DATA(cmsg)) = fd_to_send;
+
+
+    // Send the message
+    // sendmsg -> Send message on socket
+    // socket -> Socket file descriptor
+    // &msg -> Address of the message header
+    // 0 -> No special flags
+    // < 0 -> Error occurred
+    // == 0 -> Success
+    if (sendmsg(socket, &msg, 0)<0){
+        perror("Failed to send fd");
+        return -1;
+    }
+
+    return 0;
+}
 // Function to send 503 Service Unavailable response
 void send_503(int client_fd) {
 

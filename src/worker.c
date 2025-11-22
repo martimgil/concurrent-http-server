@@ -5,6 +5,107 @@
 #include "worker.h"
 #include "shared_mem.h"
 #include "semaphores.h"
+#include <sys/socket.h>
+#include <sys/un.h>
+#include <errno.h>
+
+
+// ###################################################################################################################
+// Sending file descriptors over UNIX sockets
+// https://gist.github.com/domfarolino/4293951bd95082125f2b9931cab1de40
+// ###################################################################################################################
+
+// Function to send a file descriptor over a Unix domain socket
+// socket -> Socket file descriptor
+static int recv_fd(int socket){
+    // msghdr -> Message header structure
+    // msg -> Message to be sent
+    // {0} -> Initialize all fields to ero
+    struct msghdr msg = {0}; 
+   
+    // buf -> Buffer to hold a single byte (required for sendmsg)
+    char buf[1];
+
+    // iovec -> I/O vector structure
+    // io -> I/O vector for the message
+    // .iov_base -> Pointer to the buffer
+    // .iov_len -> Length of the buffer
+    struct iovec io = { .iov_base = buf, .iov_len = 1 };
+
+    // Union to hold control message
+    union {
+
+        // buf -> Buffer for control message
+        // CMSG_SPACE -> Macro to calculate space needed for control message
+        // sizeof(fd_to_send) -> Size of the file descriptor
+        char buf[CMSG_SPACE(sizeof(fd_to_send))];
+
+        // align -> cmsghdr structure for alignment
+        // cmsghdr -> Control message header structure
+        struct cmsghdr align;
+    } u; // u -> Union to hold control message
+
+
+    // Set up the message header
+    // msg.msg_iov -> Pointer to the I/O vector
+    // &io -> Address of the I/O vector
+    msg.msg_iov = &io;
+
+    // msg.msg_iovlen -> Number of I/O vectors
+    // 1 -> Number of I/O vectors
+    msg.msg_iovlen = 1;
+
+    // msg.msg_control -> Pointer to control message buffer
+    // u.buf -> Address of the control message buffer
+    msg.msg_control = u.buf;
+
+    // msg.msg_controllen -> Length of control message buffer
+    // sizeof(u.buf) -> Size of the control message buffer
+    msg.msg_controllen = sizeof(u.buf);
+
+
+    // recvmsg -> Receive message on socket
+    // socket -> Socket file descriptor
+    // &msg -> Address of the message header
+    // 0 -> No special flags
+    // < 0 -> Error occurred
+    // == 0 -> Success
+    if (recvmsg(socket, &msg, 0)<0){
+        perror("Failed to receive fd");
+        return -1;
+    }
+
+    // cmsghdr -> Control message header
+    // CMSG_FIRSTHDR -> Macro to get the first control message header
+    // &msg -> Address of the message header
+    struct cmsghdr *cmsg = CMSG_FIRSTHDR(&msg);
+
+    // Extract the file descriptor from the control message
+    // cmsg -> Control message header
+    // CMSG_LEN -> Macro to calculate length of control message
+    // sizeof(int) -> Size of an integer (file descriptor)
+    if(cmsg && (cmsg->cmsg_len == CMSG_LEN(sizeof(int)))){
+
+        // Validate the control message
+        // cmsg->cmsg_level -> Level of the control message
+        // SOL_SOCKET -> Socket level 
+        // cmsg->cmsg_type -> Type of the control message
+        // SCM_RIGHTS -> Send file descriptor
+        if (cmsg->cmsg_level != SOL_SOCKET || cmsg->cmsg_type != SCM_RIGHTS) {
+            return -1;
+        }
+
+        // Return the received file descriptor
+        // CMSG_DATA -> Macro to get pointer to control message data
+        // (int*) -> Cast to integer pointer
+        // cmsg -> Control message header
+        return *((int *)CMSG_DATA(cmsg));
+    }
+    
+    return -1;
+
+}
+
 
 // Global variable to control the worker loop
 static volatile int worker_running = 1;
