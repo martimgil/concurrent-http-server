@@ -261,6 +261,9 @@ void enqueue_connection(shared_data_t* data, semaphores_t* sems, int client_fd, 
         perror("Failed to send fd to worker");
     }
 
+    // Close the client file descriptor in the master process
+    close(client_fd);
+
     // Release mutex and signal that a new connection is available
     sem_post(sems->queue_mutex);
     sem_post(sems->filled_slots);
@@ -317,6 +320,10 @@ int main() {
             exit(1);
         } else if (pid == 0){
             // Child process - Worker
+            // Close master's end in worker process
+            close(sv[0]); 
+
+            // Start worker main function
             worker_main(shm, &sems, i, sv[1]);
             exit(0);
         } 

@@ -117,7 +117,7 @@ void worker_signal_handler(int signum){
     worker_running = 0;
 }
 
-void worker_main(shared_data_t* shm, semaphores_t* sems, int worker_id, int channel_fd __attribute__((unused))){
+void worker_main(shared_data_t* shm, semaphores_t* sems, int worker_id, int channel_fd){
 
     // Register signal handler proprietary to this worker
 
@@ -148,13 +148,16 @@ void worker_main(shared_data_t* shm, semaphores_t* sems, int worker_id, int chan
         // Exclusive access to queue
         sem_wait(sems->queue_mutex);
 
-        // Dequeue client socket
-
+        // Dequeue client socket - Lógica da Queue em Shared Memory
         // shm -> Shared memory structure
         // queue.sockets -> Array of client sockets in the queue
         // queue.front -> Index of the front of the queue
 
-        int client_fd = shm->queue.sockets[shm->queue.front];
+        // Ignore the client socket
+        // shm -> Shared memory structure
+        // queue.front -> Index of the front of the queue
+        int ignore_fd = shm->queue.sockets[shm->queue.front];
+        (void)ignore_fd; // We don't use it here since we receive via UNIX socket
         
         // Update queue front and count
         // queue.size -> Maximum size of the queue
@@ -170,6 +173,18 @@ void worker_main(shared_data_t* shm, semaphores_t* sems, int worker_id, int chan
         // sems -> empty_slots --> Signal that an empty slot is available
         sem_post(sems->queue_mutex);
         sem_post(sems->empty_slots);
+
+        // Receive the client file descriptor from the master via UNIX socket
+        // channel_fd -> Channel file descriptor
+        // recv_fd -> Function to receive file descriptor
+        // client_fd -> Client socket file descriptor
+        int client_fd = recv_fd(channel_fd);
+
+        // Error handling
+        if (client_fd < 0) {
+            fprintf(stderr, "Worker %d: Falha ao receber descritor real.\n", worker_id);
+            continue;
+        }
 
         // Process the client request
         printf("Worker %d: Processing client socket %d\n", worker_id, client_fd);
@@ -191,10 +206,13 @@ void worker_main(shared_data_t* shm, semaphores_t* sems, int worker_id, int chan
         if (write(client_fd, "HTTP/1.1 200 OK\r\n\r\nOK", 19) < 0) {
             perror("write failed");
         }
+        
         close(client_fd); // Close the client socket
 
     }
-
+    
+    // Close the channel file descriptor
+    close(channel_fd);
     printf("Worker %d: Exiting main loop.\n", worker_id);
 
 }
