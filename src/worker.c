@@ -37,8 +37,8 @@ static int recv_fd(int socket){
 
         // buf -> Buffer for control message
         // CMSG_SPACE -> Macro to calculate space needed for control message
-        // sizeof(fd_to_send) -> Size of the file descriptor
-        char buf[CMSG_SPACE(sizeof(fd_to_send))];
+        // sizeof(int) -> Size of the file descriptor
+        char buf[CMSG_SPACE(sizeof(int))];
 
         // align -> cmsghdr structure for alignment
         // cmsghdr -> Control message header structure
@@ -117,7 +117,7 @@ void worker_signal_handler(int signum){
     worker_running = 0;
 }
 
-void worker_main(shared_data_t* shm, semaphores_t* sems, int worker_id){
+void worker_main(shared_data_t* shm, semaphores_t* sems, int worker_id, int channel_fd __attribute__((unused))){
 
     // Register signal handler proprietary to this worker
 
@@ -179,8 +179,18 @@ void worker_main(shared_data_t* shm, semaphores_t* sems, int worker_id){
         // buffer -> Buffer for reading client data
         char buffer[1024];
 
-        read(client_fd, buffer, sizeof(buffer)); // Read data from client
-        write(client_fd, "HTTP/1.1 200 OK\r\n\r\nOK", 19); // Send a simple HTTP response
+        // read -> Read data from the client socket
+        // client_fd -> Client socket file descriptor
+        if (read(client_fd, buffer, sizeof(buffer)) < 0) {
+            perror("read failed");
+        }
+
+        // Send a simple HTTP response
+        // write -> Write data to the client socket
+        // client_fd -> Client socket file descriptor
+        if (write(client_fd, "HTTP/1.1 200 OK\r\n\r\nOK", 19) < 0) {
+            perror("write failed");
+        }
         close(client_fd); // Close the client socket
 
     }

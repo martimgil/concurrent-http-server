@@ -20,7 +20,7 @@ volatile sig_atomic_t keep_running = 1;
 
 
 // Signal handler to gracefully shut down the server
-void signal_handler(int signum) {
+void signal_handler(int signum __attribute__((unused))) {
     keep_running = 0;
 }
 
@@ -134,7 +134,9 @@ void send_503(int client_fd) {
         "Server is busy. Please try again later.";
 
     // Send the response
-    write(client_fd, response, strlen(response));
+    if (write(client_fd, response, strlen(response)) < 0) {
+        perror("write failed");
+    }
 
     // Close the client connection
     close(client_fd);
@@ -229,10 +231,18 @@ int create_server_socket(int port) {
 }
 
 // Function to enqueue a connection into the shared memory queue
-void enqueue_connection(shared_data_t* data, semaphores_t* sems, int client_fd) {
+void enqueue_connection(shared_data_t* data, semaphores_t* sems, int client_fd, int channel_fd){
+
+    // Check if queue is full
+    // sem_trywait -> Try to acquire an empty slot in the queue
+    // sems -> empty_slots --> Pointer to the semaphore counting empty slots in the queue
+    if(sem_trywait(sems->empty_slots) != 0){
+        // Queue is full
+        send_503(client_fd);
+        return;
+    }
 
     // Wait for an empty slot in the queue
-    sem_wait(sems->empty_slots);
     sem_wait(sems->queue_mutex);
 
     // Enqueue the client file descriptor
@@ -244,6 +254,12 @@ void enqueue_connection(shared_data_t* data, semaphores_t* sems, int client_fd) 
     data->queue.rear = (data->queue.rear + 1) % MAX_QUEUE_SIZE;
     data->queue.count++;
 
+    // Send the client file descriptor to the worker via UNIX socket
+    // channel_fd -> Channel file descriptor
+    // client_fd -> Client file descriptor to send
+    if(send_fd(channel_fd, client_fd) < 0){
+        perror("Failed to send fd to worker");
+    }
 
     // Release mutex and signal that a new connection is available
     sem_post(sems->queue_mutex);
@@ -272,6 +288,22 @@ int main() {
     signal(SIGINT, signal_handler);
     signal(SIGTERM, signal_handler);
 
+    int sv[2];  // sv[0] = Master escreve
+                // sv[1] = Worker lê
+
+
+    // Create UNIX socket pair for communication between master and workers
+    // socketpair -> Create a pair of connected sockets
+    // AF_UNIX -> Address family for Unix domain sockets
+    // SOCK_DGRAM -> Datagram socket
+    // 0 -> Default protocol (UDP for SOCK_DGRAM)
+    // sv -> Array to hold the two socket file descriptors
+    // https://gist.github.com/domfarolino/4293951bd95082125f2b9931cab1de40
+
+    if(socketpair(AF_UNIX, SOCK_DGRAM, 0, sv) < 0){
+        perror("Failed to create socket pair");
+        exit(1);
+    }
 
     // Create worker threads (using fork)
 
@@ -285,7 +317,7 @@ int main() {
             exit(1);
         } else if (pid == 0){
             // Child process - Worker
-            worker_main(shm, &sems,i);
+            worker_main(shm, &sems, i, sv[1]);
             exit(0);
         } 
         else {
@@ -294,6 +326,8 @@ int main() {
         }
         
     }
+
+    close(sv[1]); // Close worker's end in master process
 
     // Producer - Master process
     int server_fd = create_server_socket(PORT);
@@ -327,53 +361,9 @@ int main() {
         // FEATURE 1: Connection Queue (Producer - Consumer Model)
         // ###################################################################################################################
     
-        // Check if queue is full
-
-        if(sem_trywait(sems.empty_slots) != 0){ //sem_trywait -> Used to avoid blocking the master process
-            // If queue is full, send 503 response
-            printf("Connection queue full. Sending 503 to client.\n");
-            send_503(client_fd);
-            continue;
-        }
-
-        // Exclusive access to queue
-
-        //sem_wait -> Block until semaphore is available
-        // sems.queue_mutex is a pointer to sem_t, so we need to dereference it
-        
-        sem_wait(sems.queue_mutex); 
-
-        // Enqueue connection
-
-        // shm is a pointer to shared_data_t
-        // queue.sockets is an array of integers (client file descriptors)
-        // shm -> queue.rear  --> Index to insert the new client_fd
-        // client_fd --> New client file descriptor to be added to the queue
-
-        shm->queue.sockets[shm->queue.rear] = client_fd;
-
-        // Update rear index in a circular manner
-        // queue.rear -> Is the index where the next client will be inserted
-        // MAX_QUEUE_SIZE -> Size of the circular buffer
-        // shm -> queue.rear + 1 --> Move to the next index
-        // % MAX_QUEUE_SIZE --> Wrap around if it exceeds the buffer size
-
-        shm->queue.rear = (shm->queue.rear + 1) % MAX_QUEUE_SIZE; 
-
-        // Increment count of connections in the queue
-        // shm -> queue.count --> Current number of connections in the queue
-        shm -> queue.count++;
-
-
-        // Release mutex and signal that a new connection is available
-        // sem_post -> Increment the semaphore value
-        //sems.queue_mutex -> Pointer to the mutex semaphore for the queue
-        sem_post(sems.queue_mutex);
-
-        // sems.filled_slots -> Pointer to the semaphore that counts filled slots in the queue
-        sem_post(sems.filled_slots); // Awake a worker if it's waiting for connections
-    
-        }
+        // Enqueue the connection using the dedicated function
+        enqueue_connection(shm, &sems, client_fd, sv[0]);
+    }
 
     // Cleanup before exiting
     printf("Shutting down server...\n");

@@ -1,5 +1,4 @@
 # Makefile for Concurrent HTTP Web Server
-# Trabalho 2 - Sistemas Operativos
 
 # Compiler and flags
 CC = gcc
