@@ -23,6 +23,7 @@ void signal_handler(int signum) {
 
 // Function to send 503 Service Unavailable response
 void send_503(int client_fd) {
+
     // Prepare and send the 503 response
     const char* response = 
         "HTTP/1.1 503 Service Unavailable\r\n"
@@ -38,31 +39,84 @@ void send_503(int client_fd) {
     close(client_fd);
 }
 
+// Function to create and bind the server socket
 int create_server_socket(int port) {
+
+    // Create socket
+    // AF_INET -> IPv4
+    // SOCK_STREAM -> TCP
+    // 0 -> Default protocol (TCP for SOCK_STREAM)
     int sockfd = socket(AF_INET, SOCK_STREAM, 0);
+
+    // Error handling
     if (sockfd < 0) {
         perror("socket creation failed");
         return -1;
     }
 
+
+    // Set socket options
+    //opt --> Option value
+    //opt = 1 --> Enable the option
     int opt = 1;
+
+    // setsockopt -> Set options on the socket
+    // sockfd -> Socket file descriptor
+    // SOL_SOCKET -> Level for socket options
+    // SO_REUSEADDR -> Allow reuse of local addresses
+    // &opt -> Pointer to the option value
+    // sizeof(opt) -> Size of the option value
+
     if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) < 0) {
         perror("setsockopt failed");
         close(sockfd);
         return -1;
     }
 
+    // Initialize address structure
     struct sockaddr_in addr;
+
+    // memset -> Fill memory with a constant byte
+    // &addr -> Pointer to the memory area
+    // 0 -> Byte value to set
+    // sizeof(addr) -> Number of bytes to set
     memset(&addr, 0, sizeof(addr));
+
+    // Configure address
+    // addr.sin_family -> Address family (IPv4)
+    // addr.sin_addr.s_addr -> Accept connections from any IP address
+    // addr.sin_port -> Port number (in network byte order)
+    // htons -> Convert port number to network byte order
+    // PORT -> Port number to listen on
+    // INADDR_ANY -> Accept connections from any IP address
     addr.sin_family = AF_INET;
     addr.sin_addr.s_addr = htonl(INADDR_ANY);
     addr.sin_port = htons(port);
 
+
+    // Bind socket to address
+    // bind -> Bind the socket to the specified address
+    // sockfd -> Socket file descriptor
+    // (struct sockaddr*)&addr -> Pointer to the address structure
+    // sizeof(addr) -> Size of the address structure
+
+    // Error handling    
     if (bind(sockfd, (struct sockaddr*)&addr, sizeof(addr)) < 0) {
         perror("bind failed");
         close(sockfd);
         return -1;
     }
+
+    // Start listening for incoming connections
+    // listen -> Mark the socket as a passive socket to accept incoming connections
+    // sockfd -> Socket file descriptor
+    // 128 -> Maximum length of the pending connections queue
+
+    // Error handling
+    // listen -> Start listening on the socket
+    // 128 -> Maximum length of the pending connections queue
+    // < 0 -> Error occurred
+    // == 0 -> Success
 
     if (listen(sockfd, 128) < 0) {
         perror("listen failed");
@@ -73,23 +127,31 @@ int create_server_socket(int port) {
     return sockfd;
 }
 
+// Function to enqueue a connection into the shared memory queue
+void enqueue_connection(shared_data_t* data, semaphores_t* sems, int client_fd) {
 
-void enqueue_connection(shared_data_t* data, semaphores_t* sems, int
-client_fd) {
+    // Wait for an empty slot in the queue
     sem_wait(sems->empty_slots);
     sem_wait(sems->queue_mutex);
+
+    // Enqueue the client file descriptor
+    // data -> Shared memory structure
+    // queue.sockets -> Array of client sockets in the queue
+    // queue.rear -> Index of the rear of the queue
 
     data->queue.sockets[data->queue.rear] = client_fd;
     data->queue.rear = (data->queue.rear + 1) % MAX_QUEUE_SIZE;
     data->queue.count++;
 
+
+    // Release mutex and signal that a new connection is available
     sem_post(sems->queue_mutex);
     sem_post(sems->filled_slots);
 }
 
 
 int main() {
-    // Create shared memoy
+    // Create shared memory
     shared_data_t* shm = create_shared_memory();
 
     if(!shm){
