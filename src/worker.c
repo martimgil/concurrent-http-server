@@ -117,6 +117,20 @@ void worker_signal_handler(int signum){
     worker_running = 0;
 }
 
+
+// ###################################################################################################################
+// FEATURE 1: Connection Queue Consumer
+// ###################################################################################################################
+
+
+// Worker main function
+// Wait for connections in the shared memory queue 
+// Block queue
+// Dequeue connection
+// Unblock queue
+// Mark slot as empty
+// Process connection
+
 void worker_main(shared_data_t* shm, semaphores_t* sems, int worker_id, int channel_fd){
 
     // Register signal handler proprietary to this worker
@@ -129,9 +143,6 @@ void worker_main(shared_data_t* shm, semaphores_t* sems, int worker_id, int chan
     printf("Worker %d: Starting main loop.\n", worker_id);
 
     while(worker_running){
-        // ###################################################################################################################
-        // FEATURE 1: Connection Queue Consumer
-        // ###################################################################################################################
 
         // Wait for an available connection
         if(sem_wait(sems->filled_slots)!=0){
@@ -148,7 +159,7 @@ void worker_main(shared_data_t* shm, semaphores_t* sems, int worker_id, int chan
         // Exclusive access to queue
         sem_wait(sems->queue_mutex);
 
-        // Dequeue client socket - Lógica da Queue em Shared Memory
+        // Dequeue client socket 
         // shm -> Shared memory structure
         // queue.sockets -> Array of client sockets in the queue
         // queue.front -> Index of the front of the queue

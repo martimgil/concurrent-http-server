@@ -231,6 +231,14 @@ int create_server_socket(int port) {
 }
 
 // Function to enqueue a connection into the shared memory queue
+// This is the producer function in the producer-consumer model
+// Receive a client 
+// Check if the queue is full
+// If full, send 503 response and close the connection
+// If not full, enqueue the connection and signal the worker
+// Put the client_fd into the shared memory queue
+// Free mutex and signal that a new connection is available
+
 void enqueue_connection(shared_data_t* data, semaphores_t* sems, int client_fd, int channel_fd){
 
     // Check if queue is full
