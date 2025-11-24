@@ -8,7 +8,8 @@
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <errno.h>
-
+#include "thread_pool.h"
+#include "config.h"
 
 // ###################################################################################################################
 // Sending file descriptors over UNIX sockets
@@ -140,6 +141,7 @@ void worker_main(shared_data_t* shm, semaphores_t* sems, int worker_id, int chan
     signal(SIGTERM, worker_signal_handler);
     signal(SIGINT, worker_signal_handler);
 
+    thread_pool_t* pool = creatwe_thread_pool(10); // Create a thread pool with 10 threads
     printf("Worker %d: Starting main loop.\n", worker_id);
 
     while(worker_running){
@@ -200,7 +202,10 @@ void worker_main(shared_data_t* shm, semaphores_t* sems, int worker_id, int chan
         // Process the client request
         printf("Worker %d: Processing client socket %d\n", worker_id, client_fd);
         
-        
+        // Submit the client request to the thread pool
+        thread_pool_submit(pool, client_fd);
+
+
         // Simulate processing time
         // buffer -> Buffer for reading client data
         char buffer[1024];
@@ -218,6 +223,7 @@ void worker_main(shared_data_t* shm, semaphores_t* sems, int worker_id, int chan
             perror("write failed");
         }
         
+        destroy_thread_pool(pool); // Destroy the thread pool after processing  
         close(client_fd); // Close the client socket
 
     }
