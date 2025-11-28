@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <unistd.h>
 #include <string.h>
+#include <time.h>
 
 // Function to send an HTTP response
 // Arguments:
@@ -23,6 +24,16 @@ void send_http_response(int fd, int status, const char* status_msg, const char* 
         return;
     }
 
+    time_t now = time(NULL); // Get the current time
+    struct tm tm = *gmtime(&now); // Convert to GMT time structure
+    char date_str[64]; // Buffer to hold formatted date string
+
+    // Format the date string according to HTTP specifications
+    // strftime --> Format date and time
+    strftime(date_str, sizeof(date_str), "%a, %d %b %Y %H:%M:%S GMT", &tm);
+
+
+
     // Construct HTTP response header
     char header[2048];
 
@@ -38,7 +49,7 @@ void send_http_response(int fd, int status, const char* status_msg, const char* 
     "Date: %s\r\n" // Date header
     "Connection: close\r\n" // Connection header
     "\r\n",
-    status, status_msg, content_type, body_len); // Get current date string
+    status, status_msg, content_type, body_len, date_str); // Get current date string
 
 
     // Check for formatting errors
