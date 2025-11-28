@@ -2,15 +2,6 @@
 #define THREAD_POOL_H
 #include <pthread.h>
 
-// Structure to represent a thread pool
-typedef struct {
-    pthread_t* threads; // Array of thread identifiers
-    int num_threads; // Number of threads in the pool
-    pthread_mutex_t mutex; // Mutex for synchronizing access to the pool
-    pthread_cond_t cond; // Condition variable for thread synchronization
-    int shutdown; // Flag to indicate if the pool is shutting down
-} thread_pool_t; // Thread pool structure
-
 // ###################################################################################################################
 // FEATURE 2: Thread Pool Management
 // ###################################################################################################################

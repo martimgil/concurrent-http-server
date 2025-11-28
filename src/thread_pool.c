@@ -1,6 +1,26 @@
 #include "thread_pool.h"
 #include <stdlib.h>
 
+void handle_client_request(int client_fd){
+    char buffer[1024]; // Buffer to hold client request data
+
+    // Simple HTTP response for demonstration purposes
+    if(read(client_fd, buffer, sizeof(buffer))>0){
+        // Send a simple HTTP response
+        const char* response = "HTTP/1.1 200 OK\r\nContent-Length: 19\r\n\r\n<h1>Thread Pool</h1>";    
+        
+        // write -> Write data to the client socket
+        // client_fd -> Client socket file descriptor
+        // response -> Data to be sent
+        // strlen(response) -> Length of the data
+        write(client_fd, response, strlen(response));
+    }
+
+    close(client_fd); // Close the client connection
+}
+
+
+
 // Function to create a thread pool
 // Arguments:
 // num_threads - Number of threads in the pool

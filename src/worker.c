@@ -206,9 +206,4 @@ void worker_main(shared_data_t* shm, semaphores_t* sems, int worker_id, int chan
         thread_pool_submit(pool, client_fd);
 
     }
-    // Close the channel file descriptor
-    destroy_thread_pool(pool);
-    close(channel_fd);
-    printf("Worker %d: Exiting main loop.\n", worker_id);
-
 }
