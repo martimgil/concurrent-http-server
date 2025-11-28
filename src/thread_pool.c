@@ -88,7 +88,20 @@ void* worker_thread(void* arg) {
         // Update the head pointer to the next job pool
         // Execute only if there is a job
         if(job){
-            handle_client_request(job->client_fd); // Process the client request
+            pool->head = job->next; // Update the head pointer
+            if(pool-> head == NULL ){
+                pool -> tail = NULL; // If the queue is empty, update the tail pointer
+            }
+            pool->job_count--; // Decrement the job count
+        }
+
+        pthread_mutex_unlock(&pool->mutex); // Unlock the mutex
+
+        
+        // Process the job
+        if(job){
+            // Process the job
+            handle_client_request(job->client_fd); // Handle the client request
             free(job); // Free the job structure
         }
     }

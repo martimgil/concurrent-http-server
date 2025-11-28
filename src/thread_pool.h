@@ -38,6 +38,8 @@ typedef struct {
 
 thread_pool_t* create_thread_pool(int num_threads); // Create a new thread pool
 void destroy_thread_pool(thread_pool_t* pool); // Destroy the thread pool   
+void thread_pool_submit(thread_pool_t* pool, int client_fd); // Submit a job to the thread pool
+
 
 void add_job(thread_pool_t* pool, int client_fd); // Add a job to the thread pool
 

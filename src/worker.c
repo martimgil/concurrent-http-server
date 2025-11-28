@@ -141,7 +141,7 @@ void worker_main(shared_data_t* shm, semaphores_t* sems, int worker_id, int chan
     signal(SIGTERM, worker_signal_handler);
     signal(SIGINT, worker_signal_handler);
 
-    thread_pool_t* pool = creatwe_thread_pool(10); // Create a thread pool with 10 threads
+    thread_pool_t* pool = create_thread_pool(10); // Create a thread pool with 10 threads
     printf("Worker %d: Starting main loop.\n", worker_id);
 
     while(worker_running){
@@ -205,30 +205,9 @@ void worker_main(shared_data_t* shm, semaphores_t* sems, int worker_id, int chan
         // Submit the client request to the thread pool
         thread_pool_submit(pool, client_fd);
 
-
-        // Simulate processing time
-        // buffer -> Buffer for reading client data
-        char buffer[1024];
-
-        // read -> Read data from the client socket
-        // client_fd -> Client socket file descriptor
-        if (read(client_fd, buffer, sizeof(buffer)) < 0) {
-            perror("read failed");
-        }
-
-        // Send a simple HTTP response
-        // write -> Write data to the client socket
-        // client_fd -> Client socket file descriptor
-        if (write(client_fd, "HTTP/1.1 200 OK\r\n\r\nOK", 19) < 0) {
-            perror("write failed");
-        }
-        
-        destroy_thread_pool(pool); // Destroy the thread pool after processing  
-        close(client_fd); // Close the client socket
-
     }
-    
     // Close the channel file descriptor
+    destroy_thread_pool(pool);
     close(channel_fd);
     printf("Worker %d: Exiting main loop.\n", worker_id);
 
