@@ -1,6 +1,8 @@
 #ifndef THREAD_POOL_H
 #define THREAD_POOL_H
 #include <pthread.h>
+#include "shared_mem.h"
+#include "semaphores.h"
 
 // ###################################################################################################################
 // FEATURE 2: Thread Pool Management
@@ -25,22 +27,20 @@ typedef struct {
     job_t* tail; // Pointer to the tail of the job queue
     int job_count; // Number of jobs in the queue
 
+    shared_data_t* shm; // Pointer to shared memory for statistics
+    semaphores_t* sems; // Pointer to semaphores for synchronization
 } thread_pool_t;
 
-thread_pool_t* create_thread_pool(int num_threads); // Create a new thread pool
+thread_pool_t* create_thread_pool(int num_threads, shared_data_t* shm, semaphores_t* sems); // Create a new thread pool
+
 void destroy_thread_pool(thread_pool_t* pool); // Destroy the thread pool   
 void thread_pool_submit(thread_pool_t* pool, int client_fd); // Submit a job to the thread pool
+void handle_client_request(int client_fd, shared_data_t* shm, semaphores_t* sems); // Handle client request
 
 
 void add_job(thread_pool_t* pool, int client_fd); // Add a job to the thread pool
 
 // Worker thread function
 void* worker_thread(void* arg);
-
-// Function to create a thread pool
-thread_pool_t* create_thread_pool(int num_threads);
-
-// Function to destroy a thread pool
-void destroy_thread_pool(thread_pool_t* pool);
 
 #endif

@@ -1,25 +1,33 @@
 #include "thread_pool.h"
+#include "stats.h"
 #include <stdlib.h>
 #include <unistd.h>
 #include <string.h>
 #include <stdio.h>
 
 
-void handle_client_request(int client_fd){
+void handle_client_request(int client_fd, shared_data_t* shm, semaphores_t* sems){
+    long start_time = get_time_ms(); // Get the start time for processing
+
     char buffer[1024]; // Buffer to hold client request data
+    int bytes_sent = 0; // Variable to track bytes sent
+    int status_code = 500; // HTTP status code
 
     // Simple HTTP response for demonstration purposes
     if(read(client_fd, buffer, sizeof(buffer))>0){
         // Send a simple HTTP response
         const char* response = "HTTP/1.1 200 OK\r\nContent-Length: 19\r\n\r\n<h1>Thread Pool</h1>";    
         
-        // write -> Write data to the client socket
-        // client_fd -> Client socket file descriptor
-        // response -> Data to be sent
-        // strlen(response) -> Length of the data
-       if(write(client_fd, response, strlen(response)) <0){
-           perror("Failed to send response");
-       }
+        size_t len = strlen(response); // Length of the response
+
+        // Send the response to the client
+        if(write(client_fd, response, len) > 0){
+            bytes_sent = len; // Update bytes sent
+            status_code = 200; // Update status code to 200 OK
+        }
+
+        long end_time = get_time_ms(); // Get the end time for processing
+        update_stats(shm, sems, status_code, bytes_sent, end_time - start_time); // Update statistics
     }
 
     close(client_fd); // Close the client connection
@@ -31,11 +39,14 @@ void handle_client_request(int client_fd){
 // Arguments:
 // num_threads - Number of threads in the pool
 
-thread_pool_t* create_thread_pool(int num_threads) {
+thread_pool_t* create_thread_pool(int num_threads, shared_data_t* shm, semaphores_t* sems) {
 
     thread_pool_t* pool = malloc(sizeof(thread_pool_t)); // Allocate memory for the thread pool structure
 
     if(!pool) return NULL;
+
+    pool->shm = shm; // Set the shared memory pointer
+    pool->sems = sems; // Set the semaphores pointer
 
     pool->threads = malloc(sizeof(pthread_t) * num_threads); // Allocate memory for the array of threads
     
@@ -127,7 +138,7 @@ void* worker_thread(void* arg) {
         // Process the job
         if(job){
             // Process the job
-            handle_client_request(job->client_fd); // Handle the client request
+            handle_client_request(job->client_fd, pool->shm, pool->sems); // Handle the client request
             free(job); // Free the job structure
         }
     }

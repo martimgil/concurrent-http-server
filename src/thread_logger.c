@@ -1,3 +1,4 @@
+#include "logger.h"
 #include <semaphore.h>
 #include <stdio.h>
 #include <time.h>

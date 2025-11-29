@@ -11,6 +11,7 @@
 #include "semaphores.h"
 #include "config.h" 
 #include "worker.h" 
+#include "stats.h"
 
 #define PORT 8080 
 #define NUM_WORKERS 4
@@ -18,6 +19,17 @@
 // Global variable to control the main loop
 volatile sig_atomic_t keep_running = 1;
 
+shared_data_t* g_shm = NULL; // Global pointer to shared memory
+semaphores_t* g_sems = NULL; // Global pointer to semaphores
+
+// Signal handler to print statistics periodically
+void alarm_handler(int signum) { 
+    (void)signum; // Avoid unused parameter warning
+    if(g_shm && g_sems) { // Check if global pointers are set
+        print_stats(g_shm, g_sems); // Print statistics
+    }
+    alarm(30); // Schedule next alarm in 30 seconds
+}
 
 // Signal handler to gracefully shut down the server
 void signal_handler(int signum __attribute__((unused))) {
@@ -294,6 +306,14 @@ int main() {
         destroy_shared_memory(shm);
         exit(1);
     }
+
+    g_shm = shm; // Set global shared memory pointer
+    g_sems = &sems; // Set global semaphores pointer
+
+    // Set alarm signal handler for periodic statistics printing
+    signal(SIGALRM, alarm_handler);
+    alarm(30); // Schedule first alarm in 30 seconds
+
 
     // Configure signal handlers for graceful shutdown
     signal(SIGINT, signal_handler);

@@ -10,6 +10,7 @@ typedef struct {
     long status_404; // Count of HTTP 404 status responses
     long status_500; // Count of HTTP 500 status responses
     int active_connections; // Number of active connections to the server
+    long total_response_time_ms; // Total response time in milliseconds
 } server_stats_t; // Server statistics structure
 
 // FEATURE 1: Bounded circular buffer in shared memory (size: 100 connections)

@@ -141,7 +141,7 @@ void worker_main(shared_data_t* shm, semaphores_t* sems, int worker_id, int chan
     signal(SIGTERM, worker_signal_handler);
     signal(SIGINT, worker_signal_handler);
 
-    thread_pool_t* pool = create_thread_pool(10); // Create a thread pool with 10 threads
+    thread_pool_t* pool = create_thread_pool(10, shm, sems); // Create a thread pool with 10 threads
     printf("Worker %d: Starting main loop.\n", worker_id);
 
     while(worker_running){
@@ -206,4 +206,8 @@ void worker_main(shared_data_t* shm, semaphores_t* sems, int worker_id, int chan
         thread_pool_submit(pool, client_fd);
 
     }
+
+    // Cleanup: destroy the thread pool before exiting
+    printf("Worker %d: Shutting down thread pool.\n", worker_id);
+    destroy_thread_pool(pool);
 }
