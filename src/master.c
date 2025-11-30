@@ -37,6 +37,19 @@
 
 static volatile int master_running = 1; // Control variable for main loop
 
+static shared_data_t* g_shm = NULL; // Global shared memory pointer
+static semaphores_t* g_sems = NULL; // Global semaphores pointer
+
+
+void stats_timer_handler(int signum){
+    (void)signum;
+
+    if(g_shm && g_sems){
+        print_stats(g_shm, g_sems); // 1 second interval
+    }
+
+    alarm(30);; // Re-arm the alarm for next 30 seconds
+}
 // Signal handler for graceful shutdown of the master process
 static void master_signal_handler(int signum) {
     (void)signum;
@@ -278,6 +291,10 @@ int main(int argc, char* argv[]) {
     config.cache_size_mb      = 64; // Default cache size in MB
     config.timeout_seconds    = 30; // Default timeout in seconds
 
+
+    signal(SIGALRM, stats_timer_handler); // Set up alarm signal handler
+    alarm(30); // Schedule first alarm in 30 seconds
+
     // Use safer string copy for defaults
     strncpy(config.document_root, "www", sizeof(config.document_root) - 1);
     config.document_root[sizeof(config.document_root) - 1] = '\0'; // Ensure null termination
@@ -306,6 +323,9 @@ int main(int argc, char* argv[]) {
     shared_data_t* shm = init_shared_memory(config.max_queue_size); // Initialize shared memory
     
     // Check for errors
+    shared_data_t* shm = init_shared_memory(config.max_queue_size); // Initialize shared memory
+    
+    // Check for errors
     if (!shm) {
         return 1;
     }
@@ -318,8 +338,8 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
-    // ---------------------------------------------------------------------------------------------------------------
-    // 4) Listen socket
+    g_shm = shm; // For stats printing
+    g_sems = sems; // For stats printing
     // ---------------------------------------------------------------------------------------------------------------
     int listen_fd = create_listen_socket(config.port); // Create listen socket
 

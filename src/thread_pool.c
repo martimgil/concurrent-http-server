@@ -5,56 +5,80 @@
 #include <string.h>
 #include <strings.h>   // strcasecmp
 #include <stdio.h>
-
+#include <semaphore.h> // For log_request function
 #include "worker.h"    // worker_get_cache(), worker_get_document_root()
-#include "cache.h"     // file_cache_t (Feature 4: cache por worker)
-#include "logger.h"    // logger_write (Feature 5: logging thread-safe/process-safe)
+#include "cache.h"     // file_cache_t (Feature 4: cache per worker)
+#include "logger.h"    // logger_write (Feature 5: thread-safe/process-safe logging)
 
 // ----------------------------------------------------------------------------------------
-// Forward declarations (não tens http_parser.h / http_builder.h, por isso declaramos aqui)
+// Forward declarations (http_parser.h / http_builder.h not included, declared here)
 // ----------------------------------------------------------------------------------------
 
-// Estrutura mínima usada pelo parser HTTP (compatível com http_parser.c)
+// Minimal structure used by HTTP parser (compatible with http_parser.c)
 typedef struct {
     char method[8];
     char path[512];
     char version[16];
 } http_request_t;
 
-// parse_http_request -> Implementada em http_parser.c
+// parse_http_request -> Implemented in http_parser.c
 int parse_http_request(const char* raw, http_request_t* out_req);
 
-// send_http_response -> Implementada em http_builder.c
+// send_http_response -> Implemented in http_builder.c
 void send_http_response(int fd, int status, const char* status_msg,
                         const char* content_type, const char* body, size_t body_len);
 
+// log_request -> Implemented in thread_logger.c
+// Logs HTTP requests in a thread-safe manner
+void log_request(sem_t* log_sem, const char* client_ip, const char* method, 
+                 const char* path, int status, size_t bytes);
+
 // ----------------------------------------------------------------------------------------
-// Helper: determinar MIME type a partir da extensão do ficheiro
 // ----------------------------------------------------------------------------------------
-static const char* mime_type_from_path(const char* path){
-    // path -> Caminho do recurso solicitado (ex.: "/index.html")
-    const char* ext = strrchr(path, '.'); // procurar o último '.'
-    if (!ext) return "application/octet-stream";
+// Helper: Determine MIME type based on file extension for HTTP responses
+// ----------------------------------------------------------------------------------------
+// Returns a string representing the MIME type for a given file path.
+// - path: The requested resource path (e.g., "/index.html").
+// - Looks for the file extension after the last '.' character.
+// - Compares extension (case-insensitive) to known types.
+// - Returns a default MIME type if extension is missing or unknown.
+static const char* mime_type_from_path(const char* path) {
+    // Find the last occurrence of '.' in the path (file extension)
+    const char* ext = strrchr(path, '.');
+    if (!ext)
+        return "application/octet-stream"; // No extension: use generic binary type
 
-    ext++; // avançar para depois do '.'
+    ext++; // Move pointer past the '.'
 
-    if (!strcasecmp(ext, "html")) return "text/html";
-    if (!strcasecmp(ext, "htm"))  return "text/html";
-    if (!strcasecmp(ext, "css"))  return "text/css";
-    if (!strcasecmp(ext, "js"))   return "application/javascript";
-    if (!strcasecmp(ext, "png"))  return "image/png";
-    if (!strcasecmp(ext, "jpg"))  return "image/jpeg";
-    if (!strcasecmp(ext, "jpeg")) return "image/jpeg";
-    if (!strcasecmp(ext, "gif"))  return "image/gif";
-    if (!strcasecmp(ext, "svg"))  return "image/svg+xml";
-    if (!strcasecmp(ext, "json")) return "application/json";
+    // Common web file types (case-insensitive comparison)
+    if (!strcasecmp(ext, "html"))
+        return "text/html";
+    if (!strcasecmp(ext, "htm"))
+        return "text/html";
+    if (!strcasecmp(ext, "css"))
+        return "text/css";
+    if (!strcasecmp(ext, "js"))
+        return "application/javascript";
+    if (!strcasecmp(ext, "png"))
+        return "image/png";
+    if (!strcasecmp(ext, "jpg"))
+        return "image/jpeg";
+    if (!strcasecmp(ext, "jpeg"))
+        return "image/jpeg";
+    if (!strcasecmp(ext, "gif"))
+        return "image/gif";
+    if (!strcasecmp(ext, "svg"))
+        return "image/svg+xml";
+    if (!strcasecmp(ext, "json"))
+        return "application/json";
 
-    return "application/octet-stream"; // fallback razoável
+    // Unknown or unhandled extension: use generic binary type
+    return "application/octet-stream";
 }
 
 
 // ###################################################################################################################
-// FEATURE 2 + 4 + 5: HTTP Handler com Cache LRU e Logging
+// FEATURE 2 + 4 + 5: HTTP Handler with LRU Cache and Logging
 // ###################################################################################################################
 
 void handle_client_request(int client_fd, shared_data_t* shm, semaphores_t* sems){
@@ -64,26 +88,26 @@ void handle_client_request(int client_fd, shared_data_t* shm, semaphores_t* sems
     int bytes_sent = 0; // Variable to track bytes sent
     int status_code = 500; // HTTP status code (default: 500)
 
-    // Ler pedido HTTP do cliente
-    // read -> Lê bytes do socket do cliente para o buffer
+    // Read HTTP request from client
+    // read -> Reads bytes from client socket into buffer
     ssize_t n = read(client_fd, buffer, sizeof(buffer)-1);
 
-    // Verificar erros ou conexão fechada
+    // Check for errors or closed connection
     if (n <= 0){
         close(client_fd); // Close the client connection
         return;
     }
 
-    buffer[n] = '\0'; // Null-terminate para operar como string
+    buffer[n] = '\0'; // Null-terminate to operate as string
 
     // ----------------------------------------------------------------------------------------
-    // PARSE DO PEDIDO HTTP (http_parser.c)
+    // HTTP REQUEST PARSING (http_parser.c)
     // ----------------------------------------------------------------------------------------
     http_request_t req;
 
-    // parse_http_request -> extrai method, path e version da primeira linha
+    // parse_http_request -> Extract method, path and version from first line
     if (parse_http_request(buffer, &req) != 0){
-        // Pedido malformado → 400 Bad Request
+        // Malformed request → 400 Bad Request
         const char* msg = "<h1>400 Bad Request</h1>";
         send_http_response(client_fd, 400, "Bad Request", "text/html", msg, strlen(msg));
         status_code = 400;
@@ -92,15 +116,16 @@ void handle_client_request(int client_fd, shared_data_t* shm, semaphores_t* sems
         long end_time = get_time_ms(); // Get the end time for processing
         update_stats(shm, sems, status_code, bytes_sent, end_time - start_time); // Update statistics
 
-        // Logging (Feature 5)
+        // Logging (Feature 5) - Log malformed HTTP request
         logger_write("127.0.0.1", "?", "?", status_code, (size_t)bytes_sent, end_time - start_time);
+        log_request(sems->log_mutex, "127.0.0.1", "?", "?", status_code, (size_t)bytes_sent);
 
         close(client_fd); // Close the client connection
         return;
     }
 
     // ----------------------------------------------------------------------------------------
-    // SUPORTAMOS APENAS GET NESTA FASE
+    // ONLY GET METHOD IS SUPPORTED AT THIS STAGE
     // ----------------------------------------------------------------------------------------
     if (strcmp(req.method, "GET") != 0){
         const char* msg = "<h1>405 Method Not Allowed</h1>";
@@ -111,65 +136,72 @@ void handle_client_request(int client_fd, shared_data_t* shm, semaphores_t* sems
         long end_time = get_time_ms(); // Get the end time for processing
         update_stats(shm, sems, status_code, bytes_sent, end_time - start_time); // Update statistics
 
-        // Logging (Feature 5)
+        // Logging (Feature 5) - Log unsupported HTTP method
         logger_write("127.0.0.1", req.method, req.path, status_code, (size_t)bytes_sent, end_time - start_time);
+        log_request(sems->log_mutex, "127.0.0.1", req.method, req.path, status_code, (size_t)bytes_sent);
 
         close(client_fd); // Close the client connection
         return;
     }
 
-    // ----------------------------------------------------------------------------------------
-    // CONSTRUIR CAMINHO ABSOLUTO (document_root + path)
-    // ----------------------------------------------------------------------------------------
+    // ========================================================================================
+    // BUILD ABSOLUTE FILE PATH (document_root + requested_path)
+    // ========================================================================================
 
-    // Obter document_root do worker
+    // Retrieve the document root directory configured for this worker process
     const char* docroot = worker_get_document_root();
 
-    // Se o cliente pediu "/", servimos "/index.html"
+    // Map requested path to actual resource path
+    // Serve index.html as default for root directory requests
     const char* relpath = (strcmp(req.path, "/") == 0) ? "/index.html" : req.path;
 
-    // abs_path -> Caminho absoluto para o ficheiro no disco
+    // Construct full absolute path by concatenating document root and relative path
+    // This path is used to locate files on the file system
     char abs_path[1024];
     snprintf(abs_path, sizeof(abs_path), "%s%s", docroot, relpath);
 
-    // ----------------------------------------------------------------------------------------
-    // CACHE LRU (Feature 4): tentar HIT primeiro; se MISS, carregar e inserir
-    // ----------------------------------------------------------------------------------------
+    // ========================================================================================
+    // LRU CACHE LOOKUP (Feature 4): Try cache HIT first; on MISS, load and insert
+    // ========================================================================================
+    // This cache layer improves performance by storing recently accessed files in memory.
+    // Each worker process maintains its own LRU cache to minimize lock contention.
 
-    // Obter instância de cache deste worker
+    // Retrieve the per-worker LRU cache instance for this worker process
     file_cache_t* cache = worker_get_cache();
 
-    // cache_handle_t -> “alça” de acesso aos dados em cache (mantém refcount)
+    // Handle for accessing cached data with automatic reference counting
+    // Maintains reference count to prevent cache items from being evicted while in use
     cache_handle_t h;
 
-    // 1) Tentar HIT
+    // 1) Try cache HIT
     if (cache_acquire(cache, relpath, &h)){
-        // Determinar MIME type do recurso
+        // Determine MIME type of resource
         const char* content_type = mime_type_from_path(relpath);
 
-        // Enviar resposta HTTP a partir do conteúdo em cache
+        // Send HTTP response from cached content
         send_http_response(client_fd, 200, "OK", content_type, (const char*)h.data, h.size);
 
         status_code = 200; // Update status code
         bytes_sent = (int)h.size; // Update bytes sent
 
-        // Libertar referência do item em cache
+        // Release reference to cached item (decrements refcount and allows eviction if unused)
         cache_release(cache, &h);
 
-        // Atualizar estatísticas
+        // Record end time and update statistics
         long end_time = get_time_ms(); // Get the end time for processing
         update_stats(shm, sems, status_code, bytes_sent, end_time - start_time); // Update statistics
 
-        // Logging (Feature 5)
+        // Logging (Feature 5) - calls log_request for detailed HTTP request logging (cache hit)
         logger_write("127.0.0.1", req.method, req.path, status_code, (size_t)bytes_sent, end_time - start_time);
+        log_request(sems->log_mutex, "127.0.0.1", req.method, req.path, status_code, (size_t)bytes_sent);
 
         close(client_fd); // Close the client connection
         return;
     }
 
-    // 2) MISS: verificar existência do ficheiro
+    // 2) MISS: Check if file exists on the file system
     if (access(abs_path, F_OK) != 0){
-        // Ficheiro não existe → 404
+        // File does not exist → 404 Not Found response
         const char* msg = "<h1>404 Not Found</h1>";
         send_http_response(client_fd, 404, "Not Found", "text/html", msg, strlen(msg));
         status_code = 404;
@@ -178,230 +210,251 @@ void handle_client_request(int client_fd, shared_data_t* shm, semaphores_t* sems
         long end_time = get_time_ms(); // Get the end time for processing
         update_stats(shm, sems, status_code, bytes_sent, end_time - start_time); // Update statistics
 
-        // Logging (Feature 5)
+        // Logging (Feature 5) - Log failed file access attempt
         logger_write("127.0.0.1", req.method, req.path, status_code, (size_t)bytes_sent, end_time - start_time);
+        log_request(sems->log_mutex, "127.0.0.1", req.method, req.path, status_code, (size_t)bytes_sent);
 
         close(client_fd); // Close the client connection
         return;
     }
 
-    // 3) MISS com ficheiro existente: carregar do disco e inserir na cache
+    // 3) MISS with existing file: Load from disk and insert into cache
     if (!cache_load_file(cache, relpath, abs_path, &h)){
-        // Falhou leitura → 500
+        // File read failed → 500 Internal Server Error response
         const char* msg = "<h1>500 Internal Server Error</h1>";
         send_http_response(client_fd, 500, "Internal Server Error", "text/html", msg, strlen(msg));
         status_code = 500;
         bytes_sent = (int)strlen(msg);
 
+        // Record end time and update server statistics
         long end_time = get_time_ms(); // Get the end time for processing
         update_stats(shm, sems, status_code, bytes_sent, end_time - start_time); // Update statistics
 
-        // Logging (Feature 5)
+        // Logging (Feature 5) - Log file I/O error during cache load
         logger_write("127.0.0.1", req.method, req.path, status_code, (size_t)bytes_sent, end_time - start_time);
+        log_request(sems->log_mutex, "127.0.0.1", req.method, req.path, status_code, (size_t)bytes_sent);
 
         close(client_fd); // Close the client connection
         return;
     }
 
-    // 4) Após carregar: enviar resposta com o conteúdo agora em cache
+    // 4) After loading: Send response with content now in cache (cache MISS + successful load)
     {
+        // Determine MIME type based on file extension for correct content-type header
         const char* content_type = mime_type_from_path(relpath);
 
+        // Send successful HTTP response with file content from cache
         send_http_response(client_fd, 200, "OK", content_type, (const char*)h.data, h.size);
 
-        status_code = 200; // Update status code
-        bytes_sent = (int)h.size; // Update bytes sent
+        status_code = 200; // Update status code to success
+        bytes_sent = (int)h.size; // Update bytes sent to file size
 
-        // Libertar referência do item em cache
+        // Release reference to cached item (decrements refcount and allows eviction if unused)
         cache_release(cache, &h);
 
-        // Atualizar estatísticas
+        // Record end time and update server statistics
         long end_time = get_time_ms(); // Get the end time for processing
         update_stats(shm, sems, status_code, bytes_sent, end_time - start_time); // Update statistics
 
-        // Logging (Feature 5)
+        // Logging (Feature 5) - Log successful request (cache miss but file loaded successfully)
         logger_write("127.0.0.1", req.method, req.path, status_code, (size_t)bytes_sent, end_time - start_time);
+        log_request(sems->log_mutex, "127.0.0.1", req.method, req.path, status_code, (size_t)bytes_sent);
     }
 
-    // Fechar a conexão do cliente
+    // Close the client socket connection
     close(client_fd); // Close the client connection
 }
 
 
 
-// Function to create a thread pool
+// Function to create a thread pool with worker threads
 // Arguments:
-// num_threads - Number of threads in the pool
+// num_threads - Number of worker threads to create
+// shm - Pointer to shared memory data for inter-process communication
+// sems - Pointer to semaphores for synchronization
+// Returns: Pointer to newly created thread pool, or NULL on failure
 
 thread_pool_t* create_thread_pool(int num_threads, shared_data_t* shm, semaphores_t* sems) {
 
-    thread_pool_t* pool = malloc(sizeof(thread_pool_t)); // Allocate memory for the thread pool structure
+    // Allocate memory for the thread pool structure
+    thread_pool_t* pool = malloc(sizeof(thread_pool_t));
 
+    // Check if memory allocation failed
     if(!pool) return NULL;
 
-    pool->shm = shm; // Set the shared memory pointer
-    pool->sems = sems; // Set the semaphores pointer
+    // Initialize shared memory and semaphores pointers for worker threads to use
+    pool->shm = shm;
+    pool->sems = sems;
 
-    pool->threads = malloc(sizeof(pthread_t) * num_threads); // Allocate memory for the array of threads
+    // Allocate memory for array of thread identifiers
+    pool->threads = malloc(sizeof(pthread_t) * num_threads);
     
-    pool->num_threads = num_threads; // Set the number of threads in the pool
-    pool->shutdown = 0; // Initialize the shutdown flag to 0 (false)
-    pool->head = NULL; // Initialize the head pointer to NULL
-    pool->tail = NULL; // Initialize the tail pointer to NULL
-    pool->job_count = 0; // Initialize the job count to 0
+    // Initialize pool state variables
+    pool->num_threads = num_threads;        // Store number of threads
+    pool->shutdown = 0;                     // Initialize shutdown flag (0 = false, still running)
+    pool->head = NULL;                      // Initialize job queue head (empty)
+    pool->tail = NULL;                      // Initialize job queue tail (empty)
+    pool->job_count = 0;                    // Initialize job counter (no jobs)
 
-    // Initialize the mutex
-    // pthread_mutex_init -> Initialize the mutex
-    // &pool->mutex -> Pointer to the mutex
-    // NULL -> Use default attributes
+    // Initialize the mutex for protecting shared pool state
+    // The mutex ensures only one thread can access pool->job_count, head, tail at a time
     pthread_mutex_init(&pool->mutex, NULL);
     
-    // Initialize the condition variable
-    // pthread_cond_init -> Initialize the condition variable
-    // &pool->cond -> Pointer to the condition variable
-    // NULL -> Use default attributes
+    // Initialize the condition variable for job queue notifications
+    // Worker threads will wait on this when queue is empty
     pthread_cond_init(&pool->cond, NULL);
 
-
-    // Create worker threads
-    // num_threads -> Number of threads to create
+    // Create worker threads that will wait for and process incoming jobs
     for (int i = 0; i < num_threads; i++) {
-
-        // pthread_create -> Create a new thread
-        // &pool->threads[i] -> Pointer to the thread identifier
-        // NULL -> Use default thread attributes
-        // worker_thread -> Function to be executed by the thread
-        // pool -> Argument to be passed to the thread function
-
+        // Create new thread that executes worker_thread function
+        // Pass the pool pointer so threads can access job queue and state
         pthread_create(&pool->threads[i], NULL, worker_thread, pool);
     }
 
-    return pool; // Return the created thread pool
+    // Return pointer to initialized thread pool
+    return pool;
 }
 
 
 // ###################################################################################################################
-// FEATURE 2: Thread Pool Management
+// FEATURE 2: Thread Pool Management - Worker Thread Function
 // ###################################################################################################################
+// Worker thread main loop: continuously waits for and processes client requests
+// Each thread dequeues jobs (client connections) and processes them serially
 
 void* worker_thread(void* arg) {
-    thread_pool_t* pool = (thread_pool_t*)arg; // Cast the argument to the thread pool structure
+    // Cast and extract thread pool pointer from generic argument
+    thread_pool_t* pool = (thread_pool_t*)arg;
 
+    // Main worker loop - runs until pool is shutdown and all jobs are processed
     while(1){
+        // Acquire lock to safely access shared pool state and job queue
+        pthread_mutex_lock(&pool->mutex);
 
-        pthread_mutex_lock(&pool->mutex); // Lock the mutex to access the job queue
-
-        // Wait for a job to be available or for shutdown signal
-        while(pool -> job_count == 0 && !pool->shutdown){
-
-            // Wait on the condition variable
-            // pthread_cond_wait -> Wait for the condition variable to be signaled
-            // &pool->cond -> Pointer to the condition variable
-            // &pool->mutex -> Pointer to the mutex
+        // Wait for a job to be available or shutdown signal
+        // Loop continues while queue is empty AND pool is still running
+        while(pool->job_count == 0 && !pool->shutdown){
+            // Release lock and wait for condition signal (job added or shutdown)
+            // When signaled, reacquire lock and resume
             pthread_cond_wait(&pool->cond, &pool->mutex); 
         }
 
-        // Check if the pool is shutting down
-        // If shutdown flag is set and no jobs are left, exit the thread
+        // Check if shutdown is requested with no jobs remaining
+        // This allows graceful exit after processing all pending jobs
         if(pool->shutdown && pool->job_count == 0){
-
-            // Unlock the mutex before exiting
-            // pthread_mutex_unlock -> Unlock the mutex
-            // &pool->mutex -> Pointer to the mutex
+            // Release lock before exiting thread
             pthread_mutex_unlock(&pool->mutex);
-
+            // Exit worker thread
             break;
         }
 
-        // Dequeue a job from the queue (FIFO)
-        job_t* job = pool->head; // Get the job at the head of the queue
+        // Dequeue a job from the front of the FIFO queue
+        job_t* job = pool->head;
 
-        // Update the head pointer to the next job pool
-        // Execute only if there is a job
+        // If there is a job, remove it from queue and update counters
         if(job){
-            pool->head = job->next; // Update the head pointer
-            if(pool-> head == NULL ){
-                pool -> tail = NULL; // If the queue is empty, update the tail pointer
+            // Move head pointer to next job in queue
+            pool->head = job->next;
+            
+            // If queue becomes empty after dequeue, clear tail pointer
+            if(pool->head == NULL){
+                pool->tail = NULL;
             }
-            pool->job_count--; // Decrement the job count
+            
+            // Decrement remaining job count
+            pool->job_count--;
         }
 
-        pthread_mutex_unlock(&pool->mutex); // Unlock the mutex
+        // Release lock to allow other threads to access queue
+        pthread_mutex_unlock(&pool->mutex);
 
-        
-        // Process the job
+        // Process the dequeued job outside of lock (important for concurrency)
         if(job){
-            // Process the job
-            handle_client_request(job->client_fd, pool->shm, pool->sems); // Handle the client request
-            free(job); // Free the job structure
+            // Handle the HTTP client request (includes parsing, caching, and response)
+            handle_client_request(job->client_fd, pool->shm, pool->sems);
+            
+            // Free the job structure after processing
+            free(job);
         }
     }
-    return NULL; // Exit the thread
+    
+    // Exit thread (implicit return)
+    return NULL;
 }
 
 
-// Function to Main Thread to add a job to the thread pool
+// Main thread function to enqueue a client connection to the thread pool
+// Submits client file descriptor as a new job for worker threads to process
 // Arguments:
-// pool - Pointer to the thread pool
-// client_fd - Client file descriptor to process
+// pool - Pointer to the thread pool structure
+// client_fd - File descriptor of accepted client socket connection
 
 void thread_pool_submit (thread_pool_t* pool, int client_fd){
-    job_t* job = malloc (sizeof (job_t)); // Allocate memory for the new job
+    // Allocate memory for new job structure
+    job_t* job = malloc (sizeof (job_t));
 
-    job->client_fd = client_fd; // Set the client file descriptor
-    job->next = NULL; // Initialize the next pointer to NULL
+    // Initialize job with client file descriptor
+    job->client_fd = client_fd;     // Store client socket descriptor
+    job->next = NULL;               // Clear next pointer (will be set when enqueued)
 
-    pthread_mutex_lock(&pool->mutex); // Lock the mutex to access the job queue
+    // Acquire lock before modifying shared job queue
+    pthread_mutex_lock(&pool->mutex);
 
-    // Add the job to the end of the queue
-    // If the queue is empty, set head and tail to the new job
-    if(pool-> head == NULL){
-        pool->head = job;
+    // Enqueue job at end of FIFO queue
+    // If queue is empty, this is both head and tail
+    if(pool->head == NULL){
+        pool->head = job;       // First job in queue
         pool->tail = job;
     } else {
+        // Append to existing queue by linking through tail
         pool->tail->next = job;
-        pool->tail = job;
+        pool->tail = job;       // Update tail to new job
     }
 
-    pool->job_count++; // Increment the job count
+    // Increment counter of pending jobs
+    pool->job_count++;
 
-    // Unlock the mutex and signal the condition variable
+    // Signal condition variable to wake up a waiting worker thread
+    // Unlock must follow signal to avoid race conditions
     pthread_cond_signal(&pool->cond);
     pthread_mutex_unlock(&pool->mutex);
 
 }
 
+// Gracefully shutdown thread pool, wait for all threads to complete, and free all resources
+// This function ensures all pending jobs are finished before cleanup
 void destroy_thread_pool(thread_pool_t* pool){
 
-    // Check pool
+    // Verify pool pointer is valid
     if (!pool){
         return;
     }
 
-    // Ask to exit
-    pthread_mutex_lock(&pool->mutex); // Lock the mutex to modify the pool state
-    pool->shutdown = 1; // Set the shutdown flag to 1
-    pthread_cond_broadcast(&pool->cond); // Broadcast the condition variable to wake up all waiting threads
-    pthread_mutex_unlock(&pool->mutex); // Unlock the mutex
+    // Signal all worker threads to shutdown after processing current jobs
+    pthread_mutex_lock(&pool->mutex);
+    pool->shutdown = 1;                      // Set shutdown flag (signals threads to exit)
+    pthread_cond_broadcast(&pool->cond);     // Wake up all worker threads to check shutdown flag
+    pthread_mutex_unlock(&pool->mutex);
 
+    // Wait for all worker threads to finish their execution and exit
     for (int i = 0; i < pool->num_threads; i++){
-        pthread_join(pool->threads[i], NULL); // Wait for all threads to finish
+        pthread_join(pool->threads[i], NULL); // Block until thread i completes
     }
 
-    // Cleanup
-    free(pool->threads); // Free the array of threads
-    pthread_mutex_destroy(&pool->mutex); // Destroy the mutex
-    pthread_cond_destroy(&pool->cond); // Destroy the condition variable
+    // Cleanup: Free synchronization primitives and thread array
+    free(pool->threads);                    // Free thread ID array
+    pthread_mutex_destroy(&pool->mutex);    // Destroy mutex
+    pthread_cond_destroy(&pool->cond);      // Destroy condition variable
 
-    // Free remaining jobs in the queue
-
+    // Process any remaining jobs in queue that may not have been processed
     job_t* current = pool->head;
     while (current) {
-        job_t* next = current->next;
-        close(current->client_fd); // Close the client file descriptor
-        free(current); // Free the job structure
+        job_t* next = current->next;        // Save next job before freeing current
+        close(current->client_fd);          // Close associated client socket
+        free(current);                      // Free job structure
         current = next;
-        }
+    }
 
-    free(pool); // Free the thread pool structure
+    // Free the thread pool structure itself
+    free(pool);
 }
