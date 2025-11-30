@@ -49,26 +49,6 @@ static int write_all(int fd, const void* buf, size_t len)
     const char* ptr = (const char*)buf; // Pointer to current position in buffer
     size_t total_written = 0;           // Total bytes written so far
 
-    while (total_written < len) {
-        // Attempt to write the remaining bytes
-        ssize_t bytes_written = write(fd, ptr + total_written, len - total_written);
-
-        if (bytes_written > 0) {
-            // Successfully wrote some bytes; advance the counter
-            total_written += (size_t)bytes_written;
-        } else if (bytes_written == -1 && errno == EINTR) {
-            // Write was interrupted by a signal; retry
-            continue;
-        } else {
-            // Permanent error or write returned 0 (should not happen for regular files)
-            return -1;
-        }
-    }
-
-    // All bytes written successfully
-    return 0;
-}
-
 // #########################################################################################################
 // Internal function: Get current file size
 // #########################################################################################################
@@ -237,12 +217,9 @@ void logger_write(
     );
 
     // Write log line atomically
-    if (len > 0) { 
-        // Write all bytes to log file
-        if (write_all(g_log_fd, line, (size_t)len) != 0) { // Check for errors
-            int e = errno; // Save errno
-            dprintf(STDERR_FILENO, "logger: write failed: %s\n", strerror(e)); // Log error to stderr
-        }    }
+    if (len > 0) {
+        write(g_log_fd, line, (size_t)len);
+    }
 
     // Leave critical section
     sem_post(g_sem);

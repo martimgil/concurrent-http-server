@@ -200,6 +200,7 @@ static shared_data_t* init_shared_memory(int queue_size) {
     return shm;
 }
 
+// Semáforos reais: init_semaphores(), destroy_semaphores()
 static semaphores_t* init_semaphore_system(int queue_size) {
 
     semaphores_t* sems = (semaphores_t*)malloc(sizeof(semaphores_t));
@@ -216,7 +217,6 @@ static semaphores_t* init_semaphore_system(int queue_size) {
 
     return sems;
 }
-
 // ###################################################################################################################
 // Enqueue in the shared queue (signaling capacity/count)
 // The worker ignores the stored value (since it receives the real FD via SCM_RIGHTS).
@@ -314,7 +314,9 @@ int main(int argc, char* argv[]) {
 
     // Check for errors
     if (!sems) {
-        destroy_shared_memory(shm); 
+        shm_destroy(shm);
+        return 1;
+    }
         return 1;
     }
 
@@ -326,7 +328,7 @@ int main(int argc, char* argv[]) {
     if (listen_fd < 0) { // Check for errors
         destroy_semaphores(sems); // Cleanup semaphores
         free(sems);
-        destroy_shared_memory(shm); // Cleanup shared memory
+        shm_destroy(shm); // Cleanup shared memory
         return 1;
     }
 
@@ -347,12 +349,11 @@ int main(int argc, char* argv[]) {
         destroy_semaphores(sems); // Cleanup semaphores
         free(sems);
 
-        destroy_shared_memory(shm); // Cleanup shared memory
+        shm_destroy(shm); // Cleanup shared memory
 
         // Cleanup allocated arrays
         free(pids); 
-        free(parent_end); 
-
+        free(parent_end);
         return 1;
     }
 
@@ -370,20 +371,17 @@ int main(int argc, char* argv[]) {
             close(listen_fd); // close listen socket
             destroy_semaphores(sems); // destroy semaphores
             free(sems);
-            destroy_shared_memory(shm); // destroy shared memory
+            shm_destroy(shm); // destroy shared memory
             
             // free allocated arrays
             free(pids); 
-            free(parent_end); 
-
+            free(parent_end);
             return 1;
         }
 
 
         pid_t pid = fork(); // Fork worker process
 
-        // Check for errors
-        if (pid < 0) {
             perror("fork");
 
             close(sv[0]); // close both ends of the channel 
@@ -392,7 +390,7 @@ int main(int argc, char* argv[]) {
             close(listen_fd); // close listen socket
             destroy_semaphores(sems); // destroy semaphores
             free(sems);
-            destroy_shared_memory(shm); // destroy shared memory
+            shm_destroy(shm); // destroy shared memory
             free(pids); free(parent_end); // free allocated arrays
             return 1;
         }
@@ -496,7 +494,7 @@ int main(int argc, char* argv[]) {
     // Release master's resources
     destroy_semaphores(sems);
     free(sems);
-    destroy_shared_memory(shm);
+    shm_destroy(shm);
     free(pids);
     free(parent_end);
 

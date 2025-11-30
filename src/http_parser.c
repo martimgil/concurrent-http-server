@@ -67,4 +67,3 @@ int parse_http_request(const char* buffer, http_request_t* req) {
 
     return 0;
 }
-
