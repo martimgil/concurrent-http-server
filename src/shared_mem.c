@@ -9,7 +9,7 @@
 #define SHM_NAME "/webserver_shm"
 
 // Function to create and initialize shared memory
-shared_data_t* create_shared_memory() {
+shared_data_t* create_shared_memory(int queue_size) {
 
     // shm_fd -> File descriptor for the shared memory object
     // shm_open -> Create or open a shared memory object
