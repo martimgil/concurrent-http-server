@@ -26,10 +26,10 @@
 #include <fcntl.h>
 
 #include "config.h"       // server_config_t, load_config()
-#include "shared_mem.h"   // shared_data_t, MAX_QUEUE_SIZE, estrutura da fila
-#include "semaphores.h"   // semaphores_t, empty_slots/filled_slots/queue_mutex
+#include "shared_mem.h"   // create_shared_memory(), destroy_shared_memory()
+#include "semaphores.h"   // init_semaphores(), destroy_semaphores()
 #include "worker.h"       // worker_init_resources(), worker_main(), worker_shutdown_resources()
-#include "logger.h"       // ADICIONADO: logger_init/logger_close (Feature 5)
+#include "logger.h"       // logger_init/logger_close (Feature 5)
 
 // ###################################################################################################################
 // Estado global e handlers de sinal do master
@@ -143,14 +143,14 @@ static int send_fd(int socket, int fd) {
 }
 
 // ###################################################################################################################
-// Inicialização/limpeza de Memória Partilhada e Semáforos
-// ATENÇÃO: se os teus nomes diferirem, ajusta as funções abaixo conforme o teu shared_mem.c/semaphores.c
+// Inicialização de Memória Partilhada e Semáforos (usa a API real do teu projeto)
 // ###################################################################################################################
 
-static shared_data_t* init_shared_memory(void) {
+// Shared memory real: create_shared_memory(queue_size)
+static shared_data_t* init_shared_memory(int queue_size) {
+
     // Espera-se que o módulo shared_mem trate de shm_open/ftruncate/mmap/init da fila (front=0,count=0)
-    extern shared_data_t* shared_mem_create(void);   // Ajustar se o nome real for diferente
-    shared_data_t* shm = shared_mem_create();
+    shared_data_t* shm = create_shared_memory(queue_size);
     if (!shm) {
         fprintf(stderr, "MASTER: shared_mem_create() failed.\n");
         return NULL;
@@ -158,26 +158,22 @@ static shared_data_t* init_shared_memory(void) {
     return shm;
 }
 
-static void destroy_shared_memory(shared_data_t* shm) {
-    if (!shm) return;
-    extern void shared_mem_destroy(shared_data_t*);  // Ajustar se o nome real for diferente
-    shared_mem_destroy(shm);
-}
+// Semáforos reais: init_semaphores(), destroy_semaphores()
+static semaphores_t* init_semaphore_system(int queue_size) {
 
-static semaphores_t* init_semaphores(void) {
-    extern semaphores_t* semaphores_create(void);    // Ajustar se o nome real for diferente
-    semaphores_t* sems = semaphores_create();
+    semaphores_t* sems = (semaphores_t*)malloc(sizeof(semaphores_t));
     if (!sems) {
-        fprintf(stderr, "MASTER: semaphores_create() failed.\n");
+        fprintf(stderr, "MASTER: malloc failed for semaphores\n");
         return NULL;
     }
-    return sems;
-}
 
-static void destroy_semaphores(semaphores_t* sems) {
-    if (!sems) return;
-    extern void semaphores_destroy(semaphores_t*);   // Ajustar se o nome real for diferente
-    semaphores_destroy(sems);
+    if (init_semaphores(sems, queue_size) != 0) {
+        fprintf(stderr, "MASTER: init_semaphores() failed\n");
+        free(sems);
+        return NULL;
+    }
+
+    return sems;
 }
 
 // ###################################################################################################################
@@ -258,12 +254,12 @@ int main(int argc, char* argv[]) {
     // ---------------------------------------------------------------------------------------------------------------
     // 3) Memória partilhada e semáforos
     // ---------------------------------------------------------------------------------------------------------------
-    shared_data_t* shm = init_shared_memory();
+    shared_data_t* shm = init_shared_memory(config.max_queue_size);
     if (!shm) {
         return 1;
     }
 
-    semaphores_t* sems = init_semaphores();
+    semaphores_t* sems = init_semaphore_system(config.max_queue_size);
     if (!sems) {
         destroy_shared_memory(shm);
         return 1;
@@ -275,6 +271,7 @@ int main(int argc, char* argv[]) {
     int listen_fd = create_listen_socket(config.port);
     if (listen_fd < 0) {
         destroy_semaphores(sems);
+        free(sems);
         destroy_shared_memory(shm);
         return 1;
     }
@@ -290,6 +287,7 @@ int main(int argc, char* argv[]) {
         fprintf(stderr, "MASTER: alloc failed\n");
         close(listen_fd);
         destroy_semaphores(sems);
+        free(sems);
         destroy_shared_memory(shm);
         free(pids); free(parent_end);
         return 1;
@@ -303,6 +301,7 @@ int main(int argc, char* argv[]) {
             for (int k = 0; k < i; ++k) close(parent_end[k]);
             close(listen_fd);
             destroy_semaphores(sems);
+            free(sems);
             destroy_shared_memory(shm);
             free(pids); free(parent_end);
             return 1;
@@ -315,6 +314,7 @@ int main(int argc, char* argv[]) {
             for (int k = 0; k < i; ++k) close(parent_end[k]);
             close(listen_fd);
             destroy_semaphores(sems);
+            free(sems);
             destroy_shared_memory(shm);
             free(pids); free(parent_end);
             return 1;
@@ -416,6 +416,7 @@ int main(int argc, char* argv[]) {
 
     // Libertar recursos do master
     destroy_semaphores(sems);
+    free(sems);
     destroy_shared_memory(shm);
     free(pids);
     free(parent_end);

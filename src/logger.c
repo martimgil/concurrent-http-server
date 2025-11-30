@@ -34,6 +34,32 @@ static const int LOG_MAX_ROTATIONS = 5;
 
 
 // ###################################################################################################################
+// Função interna robusta: escrever todos os bytes (tratando erros e partial write)
+// ###################################################################################################################
+static int write_all(int fd, const void* buf, size_t len)
+{
+    const char* p = (const char*)buf;
+    size_t off = 0;
+
+    while (off < len) {
+        ssize_t n = write(fd, p + off, len - off);
+
+        if (n > 0) {
+            off += (size_t)n;
+            continue;
+        }
+
+        if (n < 0 && errno == EINTR)
+            continue;  // tentar outra vez se foi interrompido
+
+        return -1; // erro permanente
+    }
+
+    return 0; // sucesso total
+}
+
+
+// ###################################################################################################################
 // Função interna: obter tamanho do ficheiro actual
 // ###################################################################################################################
 static off_t get_file_size(int fd){
@@ -158,7 +184,10 @@ void logger_write(const char* ip,
     );
 
     if (len > 0){
-        write(g_log_fd, line, (size_t)len); // atomic append
+        if (write_all(g_log_fd, line, (size_t)len) != 0) {
+            int e = errno;
+            dprintf(STDERR_FILENO, "logger: write failed: %s\n", strerror(e));
+        }
     }
 
     // Sair da secção crítica
