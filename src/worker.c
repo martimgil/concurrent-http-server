@@ -257,7 +257,6 @@ void worker_main(shared_data_t* shm, semaphores_t* sems, int worker_id, int chan
     next_iteration:
         ; // no-op label target
     }
-    }
 
     // Cleanup: destroy the thread pool before exiting
     printf("Worker %d: Shutting down thread pool.\n", worker_id);

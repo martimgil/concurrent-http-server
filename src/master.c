@@ -314,9 +314,7 @@ int main(int argc, char* argv[]) {
 
     // Check for errors
     if (!sems) {
-        shm_destroy(shm);
-        return 1;
-    }
+        destroy_shared_memory(shm);
         return 1;
     }
 
@@ -328,7 +326,7 @@ int main(int argc, char* argv[]) {
     if (listen_fd < 0) { // Check for errors
         destroy_semaphores(sems); // Cleanup semaphores
         free(sems);
-        shm_destroy(shm); // Cleanup shared memory
+        destroy_shared_memory(shm); // Cleanup shared memory
         return 1;
     }
 
@@ -349,7 +347,7 @@ int main(int argc, char* argv[]) {
         destroy_semaphores(sems); // Cleanup semaphores
         free(sems);
 
-        shm_destroy(shm); // Cleanup shared memory
+        destroy_shared_memory(shm); // Cleanup shared memory
 
         // Cleanup allocated arrays
         free(pids); 
@@ -371,7 +369,7 @@ int main(int argc, char* argv[]) {
             close(listen_fd); // close listen socket
             destroy_semaphores(sems); // destroy semaphores
             free(sems);
-            shm_destroy(shm); // destroy shared memory
+            destroy_shared_memory(shm); // destroy shared memory
             
             // free allocated arrays
             free(pids); 
@@ -382,6 +380,7 @@ int main(int argc, char* argv[]) {
 
         pid_t pid = fork(); // Fork worker process
 
+        if (pid < 0) {
             perror("fork");
 
             close(sv[0]); // close both ends of the channel 
@@ -390,7 +389,7 @@ int main(int argc, char* argv[]) {
             close(listen_fd); // close listen socket
             destroy_semaphores(sems); // destroy semaphores
             free(sems);
-            shm_destroy(shm); // destroy shared memory
+            destroy_shared_memory(shm); // destroy shared memory
             free(pids); free(parent_end); // free allocated arrays
             return 1;
         }
@@ -494,7 +493,7 @@ int main(int argc, char* argv[]) {
     // Release master's resources
     destroy_semaphores(sems);
     free(sems);
-    shm_destroy(shm);
+    destroy_shared_memory(shm);
     free(pids);
     free(parent_end);
 

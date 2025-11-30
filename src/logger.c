@@ -34,22 +34,6 @@ static const off_t LOG_MAX_SIZE = 10 * 1024 * 1024;
 static const int LOG_MAX_ROTATIONS = 5;
 
 // #########################################################################################################
-// Internal robust function: write all bytes reliably (handling errors and partial writes)
-// #########################################################################################################
-/**
- * Writes the entire buffer to the given file descriptor, handling partial writes and interruptions.
- * 
- * fd ->  File descriptor to write to.
- * buf -> Pointer to the buffer containing data to write.
- * len -> Number of bytes to write from the buffer.
- * return 0 on success (all bytes written), -1 on error.
- */
-static int write_all(int fd, const void* buf, size_t len)
-{
-    const char* ptr = (const char*)buf; // Pointer to current position in buffer
-    size_t total_written = 0;           // Total bytes written so far
-
-// #########################################################################################################
 // Internal function: Get current file size
 // #########################################################################################################
 static off_t get_file_size(int fd) { 
@@ -218,7 +202,9 @@ void logger_write(
 
     // Write log line atomically
     if (len > 0) {
-        write(g_log_fd, line, (size_t)len);
+        if (write(g_log_fd, line, (size_t)len) < 0) {
+            perror("logger: write failed");
+        }
     }
 
     // Leave critical section
