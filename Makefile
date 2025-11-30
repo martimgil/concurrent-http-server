@@ -2,7 +2,7 @@
 
 # Compiler and flags
 CC = gcc
-CFLAGS = -Wall -Wextra -pthread -g -O2
+CFLAGS = -Wall -Wextra -pthread -g -O2 -MMD -MP
 LDFLAGS = -pthread -lrt
 
 # Directories
@@ -27,18 +27,9 @@ SOURCES = $(SRC_DIR)/master.c \
           $(SRC_DIR)/thread_logger.c \
           $(SRC_DIR)/stats.c
 
-# Object files
+# Object & dep files
 OBJECTS = $(SOURCES:$(SRC_DIR)/%.c=$(BUILD_DIR)/%.o)
-
-# Header files
-HEADERS = $(SRC_DIR)/shared_mem.h \
-          $(SRC_DIR)/semaphores.h \
-          $(SRC_DIR)/thread_pool.h \
-          $(SRC_DIR)/config.h \
-          $(SRC_DIR)/cache.h \
-          $(SRC_DIR)/logger.h \
-          $(SRC_DIR)/stats.h \
-          $(SRC_DIR)/worker.h
+DEPS    = $(OBJECTS:.o=.d)
 
 # Default target
 all: directories $(TARGET)
@@ -54,17 +45,18 @@ $(TARGET): $(OBJECTS)
 	$(CC) $(OBJECTS) $(LDFLAGS) -o $@
 	@echo "Build complete: $@"
 
-# Compile source files to object files
-$(BUILD_DIR)/%.o: $(SRC_DIR)/%.c $(HEADERS)
+# Compile source files to object files (deps auto-geradas por -MMD -MP)
+$(BUILD_DIR)/%.o: $(SRC_DIR)/%.c
 	@echo "Compiling $<..."
 	$(CC) $(CFLAGS) -c $< -o $@
+
+# Include auto-generated dependency files
+-include $(DEPS)
 
 # Clean build artifacts
 clean:
 	@echo "Cleaning build artifacts..."
 	rm -rf $(BUILD_DIR) $(BIN_DIR)
-	rm -f $(SRC_DIR)/*.o
-	rm -f $(SRC_DIR)/master
 	@echo "Clean complete."
 
 # Run the server
@@ -92,4 +84,3 @@ help:
 
 # Phony targets
 .PHONY: all clean run debug install-deps help directories
-

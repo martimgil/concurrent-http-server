@@ -37,7 +37,6 @@ void destroy_thread_pool(thread_pool_t* pool); // Destroy the thread pool
 void thread_pool_submit(thread_pool_t* pool, int client_fd); // Submit a job to the thread pool
 void handle_client_request(int client_fd, shared_data_t* shm, semaphores_t* sems); // Handle client request
 
-
 void add_job(thread_pool_t* pool, int client_fd); // Add a job to the thread pool
 
 // Worker thread function

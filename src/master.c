@@ -1,435 +1,428 @@
+// ###################################################################################################################
+// master.c — Processo mestre do servidor HTTP concorrente
+//
+// Responsabilidades:
+//  - Ler configuração (server.conf)
+//  - Criar socket TCP de escuta (bind/listen)
+//  - Criar memória partilhada e semáforos (fila de conexões)
+//  - Criar N processos worker e um canal UNIX (socketpair) por worker
+//  - Aceitar conexões e distribuí-las (round-robin) enviando o FD real via SCM_RIGHTS
+//  - Shutdown gracioso em SIGINT/SIGTERM
+// ###################################################################################################################
+
 #include <stdio.h>
 #include <stdlib.h>
-#include <unistd.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <signal.h>
-#include <sys/wait.h>
-#include <errno.h>
 #include <string.h>
-#include "shared_mem.h"
-#include "semaphores.h"
-#include "config.h" 
-#include "worker.h" 
-#include "stats.h"
+#include <signal.h>
+#include <errno.h>
 
-#define PORT 8080 
-#define NUM_WORKERS 4
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <sys/un.h>
+#include <sys/wait.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <unistd.h>
+#include <fcntl.h>
 
-// Global variable to control the main loop
-volatile sig_atomic_t keep_running = 1;
+#include "config.h"       // server_config_t, load_config()
+#include "shared_mem.h"   // shared_data_t, MAX_QUEUE_SIZE, estrutura da fila
+#include "semaphores.h"   // semaphores_t, empty_slots/filled_slots/queue_mutex
+#include "worker.h"       // worker_init_resources(), worker_main(), worker_shutdown_resources()
+#include "logger.h"       // ADICIONADO: logger_init/logger_close (Feature 5)
 
-shared_data_t* g_shm = NULL; // Global pointer to shared memory
-semaphores_t* g_sems = NULL; // Global pointer to semaphores
+// ###################################################################################################################
+// Estado global e handlers de sinal do master
+// ###################################################################################################################
 
-// Signal handler to print statistics periodically
-void alarm_handler(int signum) { 
-    (void)signum; // Avoid unused parameter warning
-    if(g_shm && g_sems) { // Check if global pointers are set
-        print_stats(g_shm, g_sems); // Print statistics
-    }
-    alarm(30); // Schedule next alarm in 30 seconds
-}
+static volatile int master_running = 1;
 
-// Signal handler to gracefully shut down the server
-void signal_handler(int signum __attribute__((unused))) {
-    keep_running = 0;
+// Handler de sinal para terminar o master de forma graciosa
+static void master_signal_handler(int signum) {
+    (void)signum;
+    master_running = 0;
 }
 
 // ###################################################################################################################
-// Sending file descriptors over UNIX sockets
-// https://gist.github.com/domfarolino/4293951bd95082125f2b9931cab1de40
+// Utilitários: socket TCP (listen) e canal UNIX (socketpair)
 // ###################################################################################################################
 
+// Criação de socket servidor TCP (IPv4), bind e listen
+// Arguments:
+//  port -> Porta TCP
+// Return:
+//  descritor de socket em sucesso; -1 em erro
+static int create_listen_socket(int port) {
 
-// Function to send a file descriptor over a Unix domain socket
-// socket -> Socket file descriptor
-// fd_to_send -> File descriptor to send
-
-static int send_fd(int socket, int fd_to_send){
-    // msghdr -> Message header structure
-    // msg -> Message to be sent
-    // {0} -> Initialize all fields to zero
-    struct msghdr msg = {0}; 
-    
-    // buf -> Buffer to hold a single byte (required for sendmsg)
-    char buf[1];
-
-    // iovec -> I/O vector structure
-    // io -> I/O vector for the message
-    // .iov_base -> Pointer to the buffer
-    // .iov_len -> Length of the buffer
-    struct iovec io = { .iov_base = buf, .iov_len = 1 };
-
-    // Union to hold control message
-    union {
-
-        // buf -> Buffer for control message
-        // CMSG_SPACE -> Macro to calculate space needed for control message
-        // sizeof(fd_to_send) -> Size of the file descriptor
-        char buf[CMSG_SPACE(sizeof(fd_to_send))];
-
-        // align -> cmsghdr structure for alignment
-        // cmsghdr -> Control message header structure
-        struct cmsghdr align;
-    } u; // u -> Union to hold control message
-
-
-    // Set up the message header
-    // msg.msg_iov -> Pointer to the I/O vector
-    // &io -> Address of the I/O vector
-    msg.msg_iov = &io;
-
-    // msg.msg_iovlen -> Number of I/O vectors
-    // 1 -> Number of I/O vectors
-    msg.msg_iovlen = 1;
-
-    // msg.msg_control -> Pointer to control message buffer
-    // u.buf -> Address of the control message buffer
-    msg.msg_control = u.buf;
-
-    // msg.msg_controllen -> Length of control message buffer
-    // sizeof(u.buf) -> Size of the control message buffer
-    msg.msg_controllen = sizeof(u.buf);
-
-
-    // cmsghdr -> Control message header
-    // CMSG_FIRSTHDR -> Macro to get the first control message header
-    // &msg -> Address of the message header
-    struct cmsghdr* cmsg = CMSG_FIRSTHDR(&msg);
-
-    // Set up the control message header
-    // cmsg->cmsg_level -> Level of the control message
-    // SOL_SOCKET -> Socket level
-    cmsg->cmsg_level = SOL_SOCKET;
-
-    // cmsg->cmsg_type -> Type of the control message
-    // SCM_RIGHTS -> Send file descriptor
-    cmsg->cmsg_type = SCM_RIGHTS;
-
-    // cmsg->cmsg_len -> Length of the control message
-    // CMSG_LEN -> Macro to calculate length of control message
-    // sizeof(fd_to_send) -> Size of the file descriptor
-    cmsg->cmsg_len = CMSG_LEN(sizeof(fd_to_send));
-
-
-    // Copy the file descriptor to the control message data
-    // CMSG_DATA -> Macro to get pointer to control message data
-    // (int*) -> Cast to integer pointer
-    // fd_to_send -> File descriptor to send
-    *((int*) CMSG_DATA(cmsg)) = fd_to_send;
-
-
-    // Send the message
-    // sendmsg -> Send message on socket
-    // socket -> Socket file descriptor
-    // &msg -> Address of the message header
-    // 0 -> No special flags
-    // < 0 -> Error occurred
-    // == 0 -> Success
-    if (sendmsg(socket, &msg, 0)<0){
-        perror("Failed to send fd");
+    // socket(AF_INET, SOCK_STREAM, 0) -> TCP IPv4
+    int s = socket(AF_INET, SOCK_STREAM, 0);
+    if (s < 0) {
+        perror("socket");
         return -1;
     }
+
+    // SO_REUSEADDR -> reutilização rápida da porta após restart
+    int yes = 1;
+    if (setsockopt(s, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes)) < 0) {
+        perror("setsockopt(SO_REUSEADDR)");
+        close(s);
+        return -1;
+    }
+
+    // bind a 0.0.0.0:port
+    struct sockaddr_in addr;
+    memset(&addr, 0, sizeof(addr));
+    addr.sin_family      = AF_INET;
+    addr.sin_addr.s_addr = htonl(INADDR_ANY);
+    addr.sin_port        = htons((uint16_t)port);
+
+    if (bind(s, (struct sockaddr*)&addr, sizeof(addr)) < 0) {
+        perror("bind");
+        close(s);
+        return -1;
+    }
+
+    // listen com backlog razoável
+    if (listen(s, 1024) < 0) {
+        perror("listen");
+        close(s);
+        return -1;
+    }
+
+    return s;
+}
+
+// Criação de canal mestre<->worker por socketpair AF_UNIX (DGRAM)
+// Arguments:
+//  sv[2] -> retorna os dois descritores (sv[0] fica no master, sv[1] vai para o worker)
+// Return:
+//  0 em sucesso; -1 em erro
+static int create_worker_channel(int sv[2]) {
+    if (socketpair(AF_UNIX, SOCK_DGRAM, 0, sv) < 0) {
+        perror("socketpair");
+        return -1;
+    }
+    return 0;
+}
+
+// Enviar descritor de cliente a um worker via SCM_RIGHTS
+// Arguments:
+//  socket -> extremidade do master (sv[0])
+//  fd     -> descritor do cliente aceitado no listen
+// Return:
+//  0 em sucesso; -1 em erro
+static int send_fd(int socket, int fd) {
+    struct msghdr msg = {0};
+    char buf[1] = {'F'}; // payload "dummy" obrigatório
+    struct iovec io = { .iov_base = buf, .iov_len = 1 };
+
+    union {
+        char buf[CMSG_SPACE(sizeof(int))];
+        struct cmsghdr align;
+    } u;
+
+    memset(&u, 0, sizeof(u));
+
+    msg.msg_iov = &io;
+    msg.msg_iovlen = 1;
+    msg.msg_control = u.buf;
+    msg.msg_controllen = sizeof(u.buf);
+
+    struct cmsghdr* cmsg = CMSG_FIRSTHDR(&msg);
+    cmsg->cmsg_level = SOL_SOCKET;
+    cmsg->cmsg_type  = SCM_RIGHTS;
+    cmsg->cmsg_len   = CMSG_LEN(sizeof(int));
+
+    *((int*) CMSG_DATA(cmsg)) = fd;
+
+    if (sendmsg(socket, &msg, 0) < 0) {
+        perror("sendmsg(SCM_RIGHTS)");
+        return -1;
+    }
+    return 0;
+}
+
+// ###################################################################################################################
+// Inicialização/limpeza de Memória Partilhada e Semáforos
+// ATENÇÃO: se os teus nomes diferirem, ajusta as funções abaixo conforme o teu shared_mem.c/semaphores.c
+// ###################################################################################################################
+
+static shared_data_t* init_shared_memory(void) {
+    // Espera-se que o módulo shared_mem trate de shm_open/ftruncate/mmap/init da fila (front=0,count=0)
+    extern shared_data_t* shared_mem_create(void);   // Ajustar se o nome real for diferente
+    shared_data_t* shm = shared_mem_create();
+    if (!shm) {
+        fprintf(stderr, "MASTER: shared_mem_create() failed.\n");
+        return NULL;
+    }
+    return shm;
+}
+
+static void destroy_shared_memory(shared_data_t* shm) {
+    if (!shm) return;
+    extern void shared_mem_destroy(shared_data_t*);  // Ajustar se o nome real for diferente
+    shared_mem_destroy(shm);
+}
+
+static semaphores_t* init_semaphores(void) {
+    extern semaphores_t* semaphores_create(void);    // Ajustar se o nome real for diferente
+    semaphores_t* sems = semaphores_create();
+    if (!sems) {
+        fprintf(stderr, "MASTER: semaphores_create() failed.\n");
+        return NULL;
+    }
+    return sems;
+}
+
+static void destroy_semaphores(semaphores_t* sems) {
+    if (!sems) return;
+    extern void semaphores_destroy(semaphores_t*);   // Ajustar se o nome real for diferente
+    semaphores_destroy(sems);
+}
+
+// ###################################################################################################################
+// Enqueue na fila partilhada (sinalização de capacidade/contagem)
+// O worker ignora o valor armazenado (pois recebe o FD real via SCM_RIGHTS).
+// ###################################################################################################################
+
+// Retorna 0 em sucesso; -1 em erro
+static int enqueue_connection(shared_data_t* shm, semaphores_t* sems, int placeholder_fd) {
+
+    // Esperar por um slot livre
+    if (sem_wait(sems->empty_slots) != 0) {
+        perror("sem_wait(empty_slots)");
+        return -1;
+    }
+
+    // Zona crítica de acesso à fila
+    if (sem_wait(sems->queue_mutex) != 0) {
+        perror("sem_wait(queue_mutex)");
+        // Repor o slot livre em caso de falha
+        sem_post(sems->empty_slots);
+        return -1;
+    }
+
+    // Inserir na posição rear (front + count) % MAX_QUEUE_SIZE
+    int pos = (shm->queue.front + shm->queue.count) % MAX_QUEUE_SIZE;
+    shm->queue.sockets[pos] = placeholder_fd; // marcador (não será usado pelo worker)
+    shm->queue.count++;
+
+    // Libertar zona crítica
+    sem_post(sems->queue_mutex);
+
+    // Sinalizar item disponível
+    sem_post(sems->filled_slots);
 
     return 0;
 }
-// Function to send 503 Service Unavailable response
-void send_503(int client_fd) {
 
-    // Prepare and send the 503 response
-    const char* response = 
-        "HTTP/1.1 503 Service Unavailable\r\n"
-        "Content-Type: text/plain\r\n"
-        "Connection: close\r\n"
-        "\r\n"
-        "Server is busy. Please try again later.";
+// ###################################################################################################################
+// Função principal do processo master
+// ###################################################################################################################
 
-    // Send the response
-    if (write(client_fd, response, strlen(response)) < 0) {
-        perror("write failed");
-    }
+int main(int argc, char* argv[]) {
 
-    // Close the client connection
-    close(client_fd);
-}
+    // ---------------------------------------------------------------------------------------------------------------
+    // 1) Carregar configuração
+    // ---------------------------------------------------------------------------------------------------------------
+    const char* conf_path = (argc >= 2) ? argv[1] : "server.conf";
 
-// Function to create and bind the server socket
-int create_server_socket(int port) {
+    server_config_t config;
+    memset(&config, 0, sizeof(config));
 
-    // Create socket
-    // AF_INET -> IPv4
-    // SOCK_STREAM -> TCP
-    // 0 -> Default protocol (TCP for SOCK_STREAM)
-    int sockfd = socket(AF_INET, SOCK_STREAM, 0);
+    // Defaults razoáveis (caso falhe leitura do ficheiro)
+    config.port               = 8080;
+    strncpy(config.document_root, "www", sizeof(config.document_root) - 1);
+    config.num_workers        = 2;
+    config.threads_per_worker = 10;
+    config.max_queue_size     = MAX_QUEUE_SIZE;
+    strncpy(config.log_file, "logs/access.log", sizeof(config.log_file) - 1);
+    config.cache_size_mb      = 64;
+    config.timeout_seconds    = 30;
 
-    // Error handling
-    if (sockfd < 0) {
-        perror("socket creation failed");
-        return -1;
-    }
-
-
-    // Set socket options
-    //opt --> Option value
-    //opt = 1 --> Enable the option
-    int opt = 1;
-
-    // setsockopt -> Set options on the socket
-    // sockfd -> Socket file descriptor
-    // SOL_SOCKET -> Level for socket options
-    // SO_REUSEADDR -> Allow reuse of local addresses
-    // &opt -> Pointer to the option value
-    // sizeof(opt) -> Size of the option value
-
-    if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) < 0) {
-        perror("setsockopt failed");
-        close(sockfd);
-        return -1;
-    }
-
-    // Initialize address structure
-    struct sockaddr_in addr;
-
-    // memset -> Fill memory with a constant byte
-    // &addr -> Pointer to the memory area
-    // 0 -> Byte value to set
-    // sizeof(addr) -> Number of bytes to set
-    memset(&addr, 0, sizeof(addr));
-
-    // Configure address
-    // addr.sin_family -> Address family (IPv4)
-    // addr.sin_addr.s_addr -> Accept connections from any IP address
-    // addr.sin_port -> Port number (in network byte order)
-    // htons -> Convert port number to network byte order
-    // PORT -> Port number to listen on
-    // INADDR_ANY -> Accept connections from any IP address
-    addr.sin_family = AF_INET;
-    addr.sin_addr.s_addr = htonl(INADDR_ANY);
-    addr.sin_port = htons(port);
-
-
-    // Bind socket to address
-    // bind -> Bind the socket to the specified address
-    // sockfd -> Socket file descriptor
-    // (struct sockaddr*)&addr -> Pointer to the address structure
-    // sizeof(addr) -> Size of the address structure
-
-    // Error handling    
-    if (bind(sockfd, (struct sockaddr*)&addr, sizeof(addr)) < 0) {
-        perror("bind failed");
-        close(sockfd);
-        return -1;
-    }
-
-    // Start listening for incoming connections
-    // listen -> Mark the socket as a passive socket to accept incoming connections
-    // sockfd -> Socket file descriptor
-    // 128 -> Maximum length of the pending connections queue
-
-    // Error handling
-    // listen -> Start listening on the socket
-    // 128 -> Maximum length of the pending connections queue
-    // < 0 -> Error occurred
-    // == 0 -> Success
-
-    if (listen(sockfd, 128) < 0) {
-        perror("listen failed");
-        close(sockfd);
-        return -1;
-    }
-
-    return sockfd;
-}
-
-// Function to enqueue a connection into the shared memory queue
-// This is the producer function in the producer-consumer model
-// Receive a client 
-// Check if the queue is full
-// If full, send 503 response and close the connection
-// If not full, enqueue the connection and signal the worker
-// Put the client_fd into the shared memory queue
-// Free mutex and signal that a new connection is available
-
-void enqueue_connection(shared_data_t* data, semaphores_t* sems, int client_fd, int channel_fd){
-
-    // Check if queue is full
-    // sem_trywait -> Try to acquire an empty slot in the queue
-    // sems -> empty_slots --> Pointer to the semaphore counting empty slots in the queue
-    if(sem_trywait(sems->empty_slots) != 0){
-        // Queue is full
-        send_503(client_fd);
-        return;
-    }
-
-    // Wait for an empty slot in the queue
-    sem_wait(sems->queue_mutex);
-
-    // Enqueue the client file descriptor
-    // data -> Shared memory structure
-    // queue.sockets -> Array of client sockets in the queue
-    // queue.rear -> Index of the rear of the queue
-
-    data->queue.sockets[data->queue.rear] = client_fd;
-    data->queue.rear = (data->queue.rear + 1) % MAX_QUEUE_SIZE;
-    data->queue.count++;
-
-    // Send the client file descriptor to the worker via UNIX socket
-    // channel_fd -> Channel file descriptor
-    // client_fd -> Client file descriptor to send
-    if(send_fd(channel_fd, client_fd) < 0){
-        perror("Failed to send fd to worker");
-    }
-
-    // Close the client file descriptor in the master process
-    close(client_fd);
-
-    // Release mutex and signal that a new connection is available
-    sem_post(sems->queue_mutex);
-    sem_post(sems->filled_slots);
-}
-
-
-int main() {
-    // Create shared memory
-    shared_data_t* shm = create_shared_memory();
-
-    if(!shm){
-        perror("Failed to create shared memory");
-        exit(1);
-    }
-
-    // Create semaphores
-    semaphores_t sems;
-    if(init_semaphores(&sems, MAX_QUEUE_SIZE) < 0) {
-        perror("Failed to initialize semaphores");
-        destroy_shared_memory(shm);
-        exit(1);
-    }
-
-    g_shm = shm; // Set global shared memory pointer
-    g_sems = &sems; // Set global semaphores pointer
-
-    // Set alarm signal handler for periodic statistics printing
-    signal(SIGALRM, alarm_handler);
-    alarm(30); // Schedule first alarm in 30 seconds
-
-
-    // Configure signal handlers for graceful shutdown
-    signal(SIGINT, signal_handler);
-    signal(SIGTERM, signal_handler);
-
-    int sv[2];  // sv[0] = Master escreve
-                // sv[1] = Worker lê
-
-
-    // Create UNIX socket pair for communication between master and workers
-    // socketpair -> Create a pair of connected sockets
-    // AF_UNIX -> Address family for Unix domain sockets
-    // SOCK_DGRAM -> Datagram socket
-    // 0 -> Default protocol (UDP for SOCK_DGRAM)
-    // sv -> Array to hold the two socket file descriptors
-    // https://gist.github.com/domfarolino/4293951bd95082125f2b9931cab1de40
-
-    if(socketpair(AF_UNIX, SOCK_DGRAM, 0, sv) < 0){
-        perror("Failed to create socket pair");
-        exit(1);
-    }
-
-    // Create worker threads (using fork)
-
-    pid_t workers[NUM_WORKERS];
-
-    for(int i=0; i<NUM_WORKERS; i++){
-        pid_t pid = fork();
-
-        if(pid < 0){
-            perror("Failed to fork worker process");
-            exit(1);
-        } else if (pid == 0){
-            // Child process - Worker
-            // Close master's end in worker process
-            close(sv[0]); 
-
-            // Start worker main function
-            worker_main(shm, &sems, i, sv[1]);
-            exit(0);
-        } 
-        else {
-            // Parent process
-            workers[i] = pid;
-        }
-        
-    }
-
-    close(sv[1]); // Close worker's end in master process
-
-    // Producer - Master process
-    int server_fd = create_server_socket(PORT);
-
-    // Error handling
-    if(server_fd < 0){
-        perror("Failed to create server socket");
-        keep_running = 0;
+    if (load_config(conf_path, &config) != 0) {
+        fprintf(stderr, "MASTER: Using defaults (failed to load %s)\n", conf_path);
     } else {
-        printf("Server listening on port %d\n", PORT);
+        fprintf(stderr, "MASTER: Config loaded from %s\n", conf_path);
     }
 
+    // ADICIONADO: inicializar o logger global (Feature 5)
+    logger_init(config.log_file);
 
-    // Accept loop 
-    while(keep_running){
-        // Accept connection
-        int client_fd = accept(server_fd, NULL, NULL);
+    // ---------------------------------------------------------------------------------------------------------------
+    // 2) Handlers de sinal (CTRL+C, kill)
+    // ---------------------------------------------------------------------------------------------------------------
+    signal(SIGINT,  master_signal_handler);
+    signal(SIGTERM, master_signal_handler);
 
-        // Error handling
+    // ---------------------------------------------------------------------------------------------------------------
+    // 3) Memória partilhada e semáforos
+    // ---------------------------------------------------------------------------------------------------------------
+    shared_data_t* shm = init_shared_memory();
+    if (!shm) {
+        return 1;
+    }
+
+    semaphores_t* sems = init_semaphores();
+    if (!sems) {
+        destroy_shared_memory(shm);
+        return 1;
+    }
+
+    // ---------------------------------------------------------------------------------------------------------------
+    // 4) Listen socket
+    // ---------------------------------------------------------------------------------------------------------------
+    int listen_fd = create_listen_socket(config.port);
+    if (listen_fd < 0) {
+        destroy_semaphores(sems);
+        destroy_shared_memory(shm);
+        return 1;
+    }
+
+    // ---------------------------------------------------------------------------------------------------------------
+    // 5) Criar N workers (fork) e um canal UNIX por worker
+    // ---------------------------------------------------------------------------------------------------------------
+    int num_workers = (config.num_workers > 0) ? config.num_workers : 1;
+
+    pid_t* pids       = (pid_t*)calloc((size_t)num_workers, sizeof(pid_t));
+    int*   parent_end = (int*)  calloc((size_t)num_workers, sizeof(int));
+    if (!pids || !parent_end) {
+        fprintf(stderr, "MASTER: alloc failed\n");
+        close(listen_fd);
+        destroy_semaphores(sems);
+        destroy_shared_memory(shm);
+        free(pids); free(parent_end);
+        return 1;
+    }
+
+    for (int i = 0; i < num_workers; ++i) {
+        int sv[2];
+        if (create_worker_channel(sv) != 0) {
+            fprintf(stderr, "MASTER: failed to create channel for worker %d\n", i);
+            // limpeza parcial
+            for (int k = 0; k < i; ++k) close(parent_end[k]);
+            close(listen_fd);
+            destroy_semaphores(sems);
+            destroy_shared_memory(shm);
+            free(pids); free(parent_end);
+            return 1;
+        }
+
+        pid_t pid = fork();
+        if (pid < 0) {
+            perror("fork");
+            close(sv[0]); close(sv[1]);
+            for (int k = 0; k < i; ++k) close(parent_end[k]);
+            close(listen_fd);
+            destroy_semaphores(sems);
+            destroy_shared_memory(shm);
+            free(pids); free(parent_end);
+            return 1;
+        }
+
+        if (pid == 0) {
+            // -------------------------------------------------------------------------------------------------------
+            // Processo FILHO (WORKER)
+            // -------------------------------------------------------------------------------------------------------
+            // Fechar extremidade do master neste processo
+            close(sv[0]);
+
+            // O worker não precisa do listen_fd
+            close(listen_fd);
+
+            // Inicializar recursos do worker (ex.: cache por worker)
+            worker_init_resources(&config);
+
+            // Entrar no loop principal do worker
+            worker_main(shm, sems, i, sv[1]);
+
+            // Nota: worker_main já chama worker_shutdown_resources() no final
+            _exit(0);
+        }
+
+        // -----------------------------------------------------------------------------------------------------------
+        // Processo PAI (MASTER)
+        // -----------------------------------------------------------------------------------------------------------
+        pids[i] = pid;
+        parent_end[i] = sv[0]; // master fica com esta extremidade
+        close(sv[1]);          // fecha a extremidade do worker no master
+    }
+
+    fprintf(stderr, "MASTER: listening on port %d with %d workers.\n", config.port, num_workers);
+
+    // ---------------------------------------------------------------------------------------------------------------
+    // 6) Loop principal: accept + distribuição round-robin
+    // ---------------------------------------------------------------------------------------------------------------
+    int rr = 0; // índice de round-robin
+    while (master_running) {
+
+        // accept() bloqueante
+        struct sockaddr_in cli;
+        socklen_t cli_len = sizeof(cli);
+        int client_fd = accept(listen_fd, (struct sockaddr*)&cli, &cli_len);
         if (client_fd < 0) {
-            // Check if the error is due to interruption by signal
-            if(errno == EINTR){
-                break;
-            }
-            // Other errors
-            perror("accept failed");
+            if (errno == EINTR && !master_running) break; // interrompido por sinal
+            perror("accept");
             continue;
         }
 
-        // ###################################################################################################################
-        // FEATURE 1: Connection Queue (Producer - Consumer Model)
-        // ###################################################################################################################
-    
-        // Enqueue the connection using the dedicated function
-        enqueue_connection(shm, &sems, client_fd, sv[0]);
+        // (Opcional) Tornar não-bloqueante:
+        // int flags = fcntl(client_fd, F_GETFL, 0);
+        // fcntl(client_fd, F_SETFL, flags | O_NONBLOCK);
+
+        // Enfileirar marcação na fila partilhada (capacidade/contagem)
+        if (enqueue_connection(shm, sems, client_fd) != 0) {
+            // Se a fila estiver cheia ou erro de semáforos, recusar ligação
+            close(client_fd);
+            continue;
+        }
+
+        // Escolher worker por round-robin
+        int w = rr;
+        rr = (rr + 1) % num_workers;
+
+        // Enviar o FD real ao worker “w” via SCM_RIGHTS
+        if (send_fd(parent_end[w], client_fd) != 0) {
+            // Se falhar envio, fechar localmente
+            close(client_fd);
+            // (Opcional) registar estatística/erro
+        }
+
+        // O master já não precisa do FD depois de o enviar
+        close(client_fd);
     }
 
-    // Cleanup before exiting
-    printf("Shutting down server...\n");
+    // ---------------------------------------------------------------------------------------------------------------
+    // 7) Shutdown gracioso
+    // ---------------------------------------------------------------------------------------------------------------
+    fprintf(stderr, "MASTER: shutting down...\n");
 
-    // server_fd -> File descriptor for the server socket
-    // >= 0 -> Valid file descriptor
-    if(server_fd >= 0){
-        close(server_fd);
+    // Fechar listen
+    close(listen_fd);
+
+    // Fechar canais e sinalizar workers
+    for (int i = 0; i < num_workers; ++i) {
+        close(parent_end[i]);
+        if (pids[i] > 0) kill(pids[i], SIGTERM);
     }
 
-    // Terminate worker processes
-
-    for(int i=0; i<NUM_WORKERS; i++){
-
-        // workers[i] -> PID of the worker process
-        // SIGTERM -> Signal to terminate the process
-
-        kill(workers[i], SIGTERM);
-
-        // Wait for worker process to exit
-        // workers[i] -> PID of the worker process
-        // NULL -> No need to retrieve exit status
-        // 0 -> No special options
-
-        waitpid(workers[i], NULL, 0);
+    // Esperar pela terminação dos workers
+    for (int i = 0; i < num_workers; ++i) {
+        if (pids[i] > 0) {
+            int status = 0;
+            waitpid(pids[i], &status, 0);
+        }
     }
 
-    // Destroy semaphores and shared memory
-    destroy_semaphores(&sems);
+    // Libertar recursos do master
+    destroy_semaphores(sems);
     destroy_shared_memory(shm);
-    
+    free(pids);
+    free(parent_end);
 
+    // ADICIONADO: fechar o logger global
+    logger_close();
+
+    fprintf(stderr, "MASTER: bye.\n");
     return 0;
-    }
+}

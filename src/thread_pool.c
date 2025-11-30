@@ -3,33 +3,227 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <string.h>
+#include <strings.h>   // strcasecmp
 #include <stdio.h>
 
+#include "worker.h"    // worker_get_cache(), worker_get_document_root()
+#include "cache.h"     // file_cache_t (Feature 4: cache por worker)
+#include "logger.h"    // logger_write (Feature 5: logging thread-safe/process-safe)
+
+// ----------------------------------------------------------------------------------------
+// Forward declarations (não tens http_parser.h / http_builder.h, por isso declaramos aqui)
+// ----------------------------------------------------------------------------------------
+
+// Estrutura mínima usada pelo parser HTTP (compatível com http_parser.c)
+typedef struct {
+    char method[8];
+    char path[512];
+    char version[16];
+} http_request_t;
+
+// parse_http_request -> Implementada em http_parser.c
+int parse_http_request(const char* raw, http_request_t* out_req);
+
+// send_http_response -> Implementada em http_builder.c
+void send_http_response(int fd, int status, const char* status_msg,
+                        const char* content_type, const char* body, size_t body_len);
+
+// ----------------------------------------------------------------------------------------
+// Helper: determinar MIME type a partir da extensão do ficheiro
+// ----------------------------------------------------------------------------------------
+static const char* mime_type_from_path(const char* path){
+    // path -> Caminho do recurso solicitado (ex.: "/index.html")
+    const char* ext = strrchr(path, '.'); // procurar o último '.'
+    if (!ext) return "application/octet-stream";
+
+    ext++; // avançar para depois do '.'
+
+    if (!strcasecmp(ext, "html")) return "text/html";
+    if (!strcasecmp(ext, "htm"))  return "text/html";
+    if (!strcasecmp(ext, "css"))  return "text/css";
+    if (!strcasecmp(ext, "js"))   return "application/javascript";
+    if (!strcasecmp(ext, "png"))  return "image/png";
+    if (!strcasecmp(ext, "jpg"))  return "image/jpeg";
+    if (!strcasecmp(ext, "jpeg")) return "image/jpeg";
+    if (!strcasecmp(ext, "gif"))  return "image/gif";
+    if (!strcasecmp(ext, "svg"))  return "image/svg+xml";
+    if (!strcasecmp(ext, "json")) return "application/json";
+
+    return "application/octet-stream"; // fallback razoável
+}
+
+
+// ###################################################################################################################
+// FEATURE 2 + 4 + 5: HTTP Handler com Cache LRU e Logging
+// ###################################################################################################################
 
 void handle_client_request(int client_fd, shared_data_t* shm, semaphores_t* sems){
     long start_time = get_time_ms(); // Get the start time for processing
 
-    char buffer[1024]; // Buffer to hold client request data
+    char buffer[8192]; // Buffer to hold client request data
     int bytes_sent = 0; // Variable to track bytes sent
-    int status_code = 500; // HTTP status code
+    int status_code = 500; // HTTP status code (default: 500)
 
-    // Simple HTTP response for demonstration purposes
-    if(read(client_fd, buffer, sizeof(buffer))>0){
-        // Send a simple HTTP response
-        const char* response = "HTTP/1.1 200 OK\r\nContent-Length: 19\r\n\r\n<h1>Thread Pool</h1>";    
-        
-        size_t len = strlen(response); // Length of the response
+    // Ler pedido HTTP do cliente
+    // read -> Lê bytes do socket do cliente para o buffer
+    ssize_t n = read(client_fd, buffer, sizeof(buffer)-1);
 
-        // Send the response to the client
-        if(write(client_fd, response, len) > 0){
-            bytes_sent = len; // Update bytes sent
-            status_code = 200; // Update status code to 200 OK
-        }
+    // Verificar erros ou conexão fechada
+    if (n <= 0){
+        close(client_fd); // Close the client connection
+        return;
+    }
+
+    buffer[n] = '\0'; // Null-terminate para operar como string
+
+    // ----------------------------------------------------------------------------------------
+    // PARSE DO PEDIDO HTTP (http_parser.c)
+    // ----------------------------------------------------------------------------------------
+    http_request_t req;
+
+    // parse_http_request -> extrai method, path e version da primeira linha
+    if (parse_http_request(buffer, &req) != 0){
+        // Pedido malformado → 400 Bad Request
+        const char* msg = "<h1>400 Bad Request</h1>";
+        send_http_response(client_fd, 400, "Bad Request", "text/html", msg, strlen(msg));
+        status_code = 400;
+        bytes_sent = (int)strlen(msg);
 
         long end_time = get_time_ms(); // Get the end time for processing
         update_stats(shm, sems, status_code, bytes_sent, end_time - start_time); // Update statistics
+
+        // Logging (Feature 5)
+        logger_write("127.0.0.1", "?", "?", status_code, (size_t)bytes_sent, end_time - start_time);
+
+        close(client_fd); // Close the client connection
+        return;
     }
 
+    // ----------------------------------------------------------------------------------------
+    // SUPORTAMOS APENAS GET NESTA FASE
+    // ----------------------------------------------------------------------------------------
+    if (strcmp(req.method, "GET") != 0){
+        const char* msg = "<h1>405 Method Not Allowed</h1>";
+        send_http_response(client_fd, 405, "Method Not Allowed", "text/html", msg, strlen(msg));
+        status_code = 405;
+        bytes_sent = (int)strlen(msg);
+
+        long end_time = get_time_ms(); // Get the end time for processing
+        update_stats(shm, sems, status_code, bytes_sent, end_time - start_time); // Update statistics
+
+        // Logging (Feature 5)
+        logger_write("127.0.0.1", req.method, req.path, status_code, (size_t)bytes_sent, end_time - start_time);
+
+        close(client_fd); // Close the client connection
+        return;
+    }
+
+    // ----------------------------------------------------------------------------------------
+    // CONSTRUIR CAMINHO ABSOLUTO (document_root + path)
+    // ----------------------------------------------------------------------------------------
+
+    // Obter document_root do worker
+    const char* docroot = worker_get_document_root();
+
+    // Se o cliente pediu "/", servimos "/index.html"
+    const char* relpath = (strcmp(req.path, "/") == 0) ? "/index.html" : req.path;
+
+    // abs_path -> Caminho absoluto para o ficheiro no disco
+    char abs_path[1024];
+    snprintf(abs_path, sizeof(abs_path), "%s%s", docroot, relpath);
+
+    // ----------------------------------------------------------------------------------------
+    // CACHE LRU (Feature 4): tentar HIT primeiro; se MISS, carregar e inserir
+    // ----------------------------------------------------------------------------------------
+
+    // Obter instância de cache deste worker
+    file_cache_t* cache = worker_get_cache();
+
+    // cache_handle_t -> “alça” de acesso aos dados em cache (mantém refcount)
+    cache_handle_t h;
+
+    // 1) Tentar HIT
+    if (cache_acquire(cache, relpath, &h)){
+        // Determinar MIME type do recurso
+        const char* content_type = mime_type_from_path(relpath);
+
+        // Enviar resposta HTTP a partir do conteúdo em cache
+        send_http_response(client_fd, 200, "OK", content_type, (const char*)h.data, h.size);
+
+        status_code = 200; // Update status code
+        bytes_sent = (int)h.size; // Update bytes sent
+
+        // Libertar referência do item em cache
+        cache_release(cache, &h);
+
+        // Atualizar estatísticas
+        long end_time = get_time_ms(); // Get the end time for processing
+        update_stats(shm, sems, status_code, bytes_sent, end_time - start_time); // Update statistics
+
+        // Logging (Feature 5)
+        logger_write("127.0.0.1", req.method, req.path, status_code, (size_t)bytes_sent, end_time - start_time);
+
+        close(client_fd); // Close the client connection
+        return;
+    }
+
+    // 2) MISS: verificar existência do ficheiro
+    if (access(abs_path, F_OK) != 0){
+        // Ficheiro não existe → 404
+        const char* msg = "<h1>404 Not Found</h1>";
+        send_http_response(client_fd, 404, "Not Found", "text/html", msg, strlen(msg));
+        status_code = 404;
+        bytes_sent = (int)strlen(msg);
+
+        long end_time = get_time_ms(); // Get the end time for processing
+        update_stats(shm, sems, status_code, bytes_sent, end_time - start_time); // Update statistics
+
+        // Logging (Feature 5)
+        logger_write("127.0.0.1", req.method, req.path, status_code, (size_t)bytes_sent, end_time - start_time);
+
+        close(client_fd); // Close the client connection
+        return;
+    }
+
+    // 3) MISS com ficheiro existente: carregar do disco e inserir na cache
+    if (!cache_load_file(cache, relpath, abs_path, &h)){
+        // Falhou leitura → 500
+        const char* msg = "<h1>500 Internal Server Error</h1>";
+        send_http_response(client_fd, 500, "Internal Server Error", "text/html", msg, strlen(msg));
+        status_code = 500;
+        bytes_sent = (int)strlen(msg);
+
+        long end_time = get_time_ms(); // Get the end time for processing
+        update_stats(shm, sems, status_code, bytes_sent, end_time - start_time); // Update statistics
+
+        // Logging (Feature 5)
+        logger_write("127.0.0.1", req.method, req.path, status_code, (size_t)bytes_sent, end_time - start_time);
+
+        close(client_fd); // Close the client connection
+        return;
+    }
+
+    // 4) Após carregar: enviar resposta com o conteúdo agora em cache
+    {
+        const char* content_type = mime_type_from_path(relpath);
+
+        send_http_response(client_fd, 200, "OK", content_type, (const char*)h.data, h.size);
+
+        status_code = 200; // Update status code
+        bytes_sent = (int)h.size; // Update bytes sent
+
+        // Libertar referência do item em cache
+        cache_release(cache, &h);
+
+        // Atualizar estatísticas
+        long end_time = get_time_ms(); // Get the end time for processing
+        update_stats(shm, sems, status_code, bytes_sent, end_time - start_time); // Update statistics
+
+        // Logging (Feature 5)
+        logger_write("127.0.0.1", req.method, req.path, status_code, (size_t)bytes_sent, end_time - start_time);
+    }
+
+    // Fechar a conexão do cliente
     close(client_fd); // Close the client connection
 }
 
@@ -211,4 +405,3 @@ void destroy_thread_pool(thread_pool_t* pool){
 
     free(pool); // Free the thread pool structure
 }
-
