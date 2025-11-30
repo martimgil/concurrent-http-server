@@ -1,70 +1,72 @@
 #include <stdio.h>
 #include <string.h>
 #include <stddef.h>
-// Structure to hold parsed HTTP request components
+
+// Estrutura para armazenar os componentes do pedido HTTP
 typedef struct {
-    char method[16]; // HTTP method (e.g., GET, POST)
-    char path[512];  // Request path (e.g., /index.html)
-    char version[16]; // HTTP version (e.g., HTTP/1.1)
-} http_request_t; // HTTP request structure
+    char method[16];   // Método HTTP (ex.: GET, POST)
+    char path[512];    // Caminho do pedido (ex.: /index.html)
+    char version[16];  // Versão HTTP (ex.: HTTP/1.1)
+} http_request_t;  // Estrutura do pedido HTTP
 
 
-// Function to parse an HTTP request from a buffer
+// Função para analisar um pedido HTTP do buffer
 // Arguments:
-// buffer - Pointer to the buffer containing the HTTP request
-// req - Pointer to the http_request_t structure to store parsed components
-
+//  buffer -> Ponteiro para o buffer contendo o pedido HTTP
+//  req    -> Ponteiro para a estrutura http_request_t para armazenar os componentes analisados
 int parse_http_request(const char* buffer, http_request_t* req) {
 
-    // Validate input parameters
-    if (!buffer || !req){
-        return -1;
+    // Validar parâmetros de entrada
+    if (!buffer || !req) {
+        return -1;  // Erro se os parâmetros forem inválidos
     }
 
-    // Extract the first line of the HTTP request
-    // Find the end of the first line
-    // line_end --> Pointer to the end of the first line
-    // strstr --> Locate the first occurrence of "\r\n" in the buffer
-
+    // Extrair a primeira linha do pedido HTTP
+    // Procurar pelo fim da primeira linha (usando "\r\n")
     char* line_end = strstr(buffer, "\r\n");
-    
-    // Check if the first line was found
-    if (!line_end){
-        return -1;
+
+    // Verificar se encontramos o fim da linha
+    if (!line_end) {
+        return -1;  // Retorna erro se não encontrar o fim da linha
     }
 
-    // Copy the first line into a temporary buffer
-    // first_line --> Temporary buffer to hold the first line
+    // Copiar a primeira linha para um buffer temporário
     char first_line[1024];
 
-    // Calculate the length of the first line
-    // len --> Length of the first line
-    // line_end -> Pointer to the end of the first line
-    // buffer -> Pointer to the start of the buffer
-    // line_end - buffer --> Length of the first line
+    // Calcular o comprimento da primeira linha
     size_t len = line_end - buffer;
 
-    // Ensure the length does not exceed the size of first_line
-    if (len >= sizeof(first_line)){ 
-        return -1;
+    // Garantir que o comprimento não ultrapasse o tamanho do buffer
+    if (len >= sizeof(first_line)) {
+        return -1;  // Erro caso o comprimento seja maior que o buffer
     }
 
-    // Copy the first line into first_line
-    // strncpy --> Copy the first line into first_line
-    // first_line --> Temporary buffer to hold the first line
-    // buffer --> Pointer to the start of the buffer
-    // len --> Length of the first line
-
+    // Copiar a primeira linha para o buffer temporário
     strncpy(first_line, buffer, len);
     
-    first_line[len] = '\0'; // Null-terminate the string
+    first_line[len] = '\0';  // Adicionar o terminador NUL para garantir uma string válida
 
-    // Use sscanf with width limits to prevent buffer overflows
-    // sscanf --> Read formatted data from the string
+    // Usar sscanf para fazer o parsing da linha
+    // Limitar a largura dos campos para evitar estouros de buffer
     if (sscanf(first_line, "%15s %511s %15s", req->method, req->path, req->version) != 3) {
-        return -1;
+        return -1;  // Retorna erro se não conseguir analisar corretamente
     }
 
-    return 0;
-}
+    // Se o método for POST, podemos adicionar mais validações (opcional)
+    // Neste caso, o servidor só lida com GET, mas o POST poderia ser adicionado para outra funcionalidade
+    if (strncmp(req->method, "GET", 3) != 0) {
+        return -1;  // Só aceitamos o método GET
+    }
 
+    // Sanitizar o path (remove "/" extra, se necessário)
+    if (req->path[0] == '/') {
+        memmove(req->path, req->path + 1, strlen(req->path));  // Remover a barra inicial
+    }
+
+    // Garantir que o caminho não exceda o limite do buffer
+    if (strlen(req->path) >= sizeof(req->path)) {
+        return -1;  // Retorna erro se o path for muito longo
+    }
+
+    return 0;  // Retorna sucesso
+}

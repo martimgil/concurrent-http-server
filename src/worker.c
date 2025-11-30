@@ -248,19 +248,38 @@ void worker_main(shared_data_t* shm, semaphores_t* sems, int worker_id, int chan
     while(worker_running){
 
         // Wait for an available connection
-        if(sem_wait(sems->filled_slots)!=0){
-            
-            if(!worker_running){ // Check if we need to exit
-                break;
+        // Tratar EINTR para que o Ctrl+C/SIGTERM acorde o worker
+        while (worker_running) {
+            if (sem_wait(sems->filled_slots) == 0) break;
+            if (errno == EINTR) {
+                if (!worker_running) break;  // sair no shutdown
+                continue; // sinal transitório — repetir wait
             }
-            perror("Worker sem_wait error");
-            continue;
-
+            perror("Worker sem_wait(filled_slots) error");
+            // erro não-EINTR: tenta continuar o loop principal
+            break;
         }
-
+        if (!worker_running) break;
 
         // Exclusive access to queue
-        sem_wait(sems->queue_mutex);
+        while (worker_running) {
+            if (sem_wait(sems->queue_mutex) == 0) break;
+            if (errno == EINTR) {
+                if (!worker_running) break;
+                continue;
+            }
+            perror("Worker sem_wait(queue_mutex) error");
+            // Falhou adquirir mutex: devolver slot preenchido para não perder sinal
+            sem_post(sems->filled_slots);
+            // e seguir para próximo ciclo
+            goto next_iteration;
+        }
+        if (!worker_running) {
+            // se saímos por shutdown, não deixar o mutex agarrado
+            // (aqui só se entrou no while se tivesse conseguido lock)
+            // portanto nada a fazer
+            break;
+        }
 
         // Dequeue client socket 
         // shm -> Shared memory structure
@@ -292,27 +311,32 @@ void worker_main(shared_data_t* shm, semaphores_t* sems, int worker_id, int chan
         // channel_fd -> Channel file descriptor
         // recv_fd -> Function to receive file descriptor
         // client_fd -> Client socket file descriptor
-        int client_fd = recv_fd(channel_fd);
+        {
+            int client_fd = recv_fd(channel_fd);
 
-        // Error handling
-        if (client_fd < 0) {
-            fprintf(stderr, "Worker %d: Falha ao receber descritor real.\n", worker_id);
-            continue;
+            // Error handling
+            if (client_fd < 0) {
+                if (!worker_running) break; // shutdown: sair
+                fprintf(stderr, "Worker %d: Falha ao receber descritor real.\n", worker_id);
+                goto next_iteration;
+            }
+
+            // Process the client request
+            printf("Worker %d: Processing client socket %d\n", worker_id, client_fd);
+            
+            // Submit the client request to the thread pool
+            // thread_pool_submit -> entrega o descritor para processamento assíncrono
+            // O handler associado ao pool deve:
+            //   1) Interpretar o pedido HTTP
+            //   2) Consultar/usar a cache com worker_get_cache()
+            //   3) Obter o document root com worker_get_document_root()
+            //   4) Escrever a resposta no socket
+            //   5) Fechar o socket no fim do processamento
+            thread_pool_submit(pool, client_fd);
         }
 
-        // Process the client request
-        printf("Worker %d: Processing client socket %d\n", worker_id, client_fd);
-        
-        // Submit the client request to the thread pool
-        // thread_pool_submit -> entrega o descritor para processamento assíncrono
-        // O handler associado ao pool deve:
-        //   1) Interpretar o pedido HTTP
-        //   2) Consultar/usar a cache com worker_get_cache()
-        //   3) Obter o document root com worker_get_document_root()
-        //   4) Escrever a resposta no socket
-        //   5) Fechar o socket no fim do processamento
-        thread_pool_submit(pool, client_fd);
-
+    next_iteration:
+        ; // no-op label target
     }
 
     // Cleanup: destroy the thread pool before exiting
