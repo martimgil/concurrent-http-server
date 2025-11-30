@@ -3,7 +3,7 @@
 
 #include <stdbool.h>
 
-// Função para verificar e sanitizar o pedido GET
+// Funtion to parse an HTTP request line
 bool parse_http_request(const char* request, char* method, char* path, size_t path_size);
 
 #endif /* HTTP_PARSER_H */

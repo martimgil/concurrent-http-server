@@ -29,7 +29,7 @@ typedef struct {
     server_stats_t stats; // Server statistics
 } shared_data_t; // Combined shared data structure
 
-shared_data_t* create_shared_memory(); // Allocate and initialize the shared memory segment
+shared_data_t* create_shared_memory(int queue_size); // Allocate and initialize the shared memory segment
     
 void destroy_shared_memory(shared_data_t* data); // Clean up and release the shared memory
 

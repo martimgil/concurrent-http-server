@@ -9,187 +9,203 @@
 #include <time.h>
 #include <sys/stat.h>
 #include <errno.h>
+#include <semaphore.h>
 
-// ###################################################################################################################
-// ESTADO INTERNO DO LOGGER
-// ###################################################################################################################
+// #########################################################################################################
+// LOGGER INTERNAL STATE
+// #########################################################################################################
 
-// Caminho absoluto do ficheiro de log
+// Absolute path to the log file
 static char g_log_path[512];
 
-// File descriptor usado para escrita
+// File descriptor for writing
 static int g_log_fd = -1;
 
-// Semáforo POSIX global para garantir exclusão mútua entre processos & threads
+// Global POSIX semaphore for mutual exclusion between processes & threads
 static sem_t* g_sem = NULL;
 
-// Nome fixo do semáforo POSIX (deve começar com '/')
+// Fixed name for the POSIX semaphore (must start with '/')
 static const char* LOG_SEM_NAME = "/ws_log_sem";
 
-// Tamanho máximo permitido antes da rotação
-static const off_t LOG_MAX_SIZE = 10 * 1024 * 1024;  // 10 MB
+// Maximum allowed log file size before rotation (10 MB)
+static const off_t LOG_MAX_SIZE = 10 * 1024 * 1024;
 
-// Quantidade de ficheiros de histórico
+// Number of rotated log files to keep
 static const int LOG_MAX_ROTATIONS = 5;
 
 
-// ###################################################################################################################
-// Função interna robusta: escrever todos os bytes (tratando erros e partial write)
-// ###################################################################################################################
-static int write_all(int fd, const void* buf, size_t len)
-{
-    const char* p = (const char*)buf;
-    size_t off = 0;
+// #########################################################################################################
+// Internal function: Get current file size
+// #########################################################################################################
+static off_t get_file_size(int fd) { 
 
-    while (off < len) {
-        ssize_t n = write(fd, p + off, len - off);
+    struct stat st; // File status structure
 
-        if (n > 0) {
-            off += (size_t)n;
-            continue;
-        }
-
-        if (n < 0 && errno == EINTR)
-            continue;  // tentar outra vez se foi interrompido
-
-        return -1; // erro permanente
+    // Get file status
+    // fstat -> Get file status
+    if (fstat(fd, &st) == 0) {
+        return st.st_size; // Return file size
     }
-
-    return 0; // sucesso total
+    return -1; // Error case
 }
 
 
-// ###################################################################################################################
-// Função interna: obter tamanho do ficheiro actual
-// ###################################################################################################################
-static off_t get_file_size(int fd){
-    struct stat st;
-    if (fstat(fd, &st) == 0) return st.st_size;
-    return -1;
-}
-
-
-// ###################################################################################################################
-// Função interna: efetuar rotação automática do log
+// #########################################################################################################
+// Internal function: Perform automatic log rotation
 // access.log → access.log.1 → ... → access.log.5
-// ###################################################################################################################
-static void rotate_logs(){
+// #########################################################################################################
 
-    // Fechar ficheiro atual antes de rodar
-    if (g_log_fd >= 0){
-        close(g_log_fd);
-        g_log_fd = -1;
+// Rotates log files when the main log file exceeds the maximum size.
+static void rotate_logs() {
+
+    // Close current log file before rotating
+
+    if (g_log_fd >= 0) { // If log file is open
+        close(g_log_fd); // Close file
+        g_log_fd = -1; // Invalidate file descriptor
     }
 
-    // Apagar o ficheiro mais antigo
-    char oldpath[600], newpath[600];
+    char oldpath[600]; // Buffer for old path
+    char newpath[600]; // Buffer for new path
 
-    snprintf(oldpath, sizeof(oldpath), "%s.%d", g_log_path, LOG_MAX_ROTATIONS);
-    unlink(oldpath);
+    // Remove the oldest rotated log file
+    // snprintf -> Format string into buffer
+    snprintf(oldpath, sizeof(oldpath), "%s.%d", g_log_path, LOG_MAX_ROTATIONS); // Oldest log file 
+    unlink(oldpath); // Remove file
 
-    // Rodar do N-1 até 1
-    for (int i = LOG_MAX_ROTATIONS - 1; i >= 1; i--){
-        snprintf(oldpath, sizeof(oldpath), "%s.%d", g_log_path, i);
-        snprintf(newpath, sizeof(newpath), "%s.%d", g_log_path, i + 1);
-        rename(oldpath, newpath);
+    // Shift rotated logs: N-1 → N, ..., 1 → 2
+    // LOG_MAX_ROTATIONS - 1 down to 1
+    for (int i = LOG_MAX_ROTATIONS - 1; i >= 1; i--) { // From N-1 down to 1
+
+        snprintf(oldpath, sizeof(oldpath), "%s.%d", g_log_path, i); // Current log file
+        snprintf(newpath, sizeof(newpath), "%s.%d", g_log_path, i + 1); // Next log file
+        rename(oldpath, newpath); // Rename (move) file
     }
 
-    // Mover o principal → .1
-    snprintf(newpath, sizeof(newpath), "%s.1", g_log_path);
-    rename(g_log_path, newpath);
+    // Move main log file to .1
+    snprintf(newpath, sizeof(newpath), "%s.1", g_log_path); // New name for main log file
+    rename(g_log_path, newpath); // Rename main log file
 
-    // Reabrir o principal vazio
-    g_log_fd = open(g_log_path, O_CREAT | O_WRONLY | O_APPEND, 0644);
+    // Reopen main log file (empty)
+    // O_CREAT: create if not exists, O_WRONLY: write only, O_APPEND: append mode
+    g_log_fd = open(g_log_path, O_CREAT | O_WRONLY | O_APPEND, 0644); // Open new log file
 }
 
 
-// ###################################################################################################################
-// Inicialização do logger
-// ###################################################################################################################
-void logger_init(const char* logfile_path){
+// #########################################################################################################
+// Logger initialization
+// #########################################################################################################
 
-    // Guardar caminho
-    strncpy(g_log_path, logfile_path, sizeof(g_log_path)-1);
-    g_log_path[sizeof(g_log_path)-1] = '\0';
+// Initializes the logger with the specified log file path.
+void logger_init(const char* logfile_path) {
+    // Store log file path
+    // strncpy -> Safe string copy
+    strncpy(g_log_path, logfile_path, sizeof(g_log_path) - 1); // Copy path
 
-    // Criar/abrir semáforo POSIX partilhado entre processos
-    g_sem = sem_open(LOG_SEM_NAME, O_CREAT, 0666, 1);
+    g_log_path[sizeof(g_log_path) - 1] = '\0'; // Ensure null-termination
 
-    if (g_sem == SEM_FAILED){
+    // Create/open POSIX semaphore shared between processes
+    g_sem = sem_open(LOG_SEM_NAME, O_CREAT, 0666, 1); // Initial value 1
+
+    // Check for errors
+    if (g_sem == SEM_FAILED) {
         perror("logger: sem_open");
         exit(1);
     }
 
-    // Abrir ficheiro de log
+    // Open log file
     g_log_fd = open(g_log_path, O_CREAT | O_WRONLY | O_APPEND, 0644);
 
-    if (g_log_fd < 0){
+    // Check for errors
+    if (g_log_fd < 0) {
         perror("logger: open logfile");
         exit(1);
     }
 }
 
 
-// ###################################################################################################################
-// Encerrar logger
-// ###################################################################################################################
-void logger_close(){
-    if (g_log_fd >= 0){
-        close(g_log_fd);
-        g_log_fd = -1;
+// #########################################################################################################
+// Logger shutdown
+// #########################################################################################################
+void logger_close() { 
+    // Close log file descriptor
+    if (g_log_fd >= 0) { 
+        close(g_log_fd); // Close file
+        g_log_fd = -1; // Invalidate descriptor
     }
 
-    if (g_sem){
+
+    // Close semaphore
+    if (g_sem) {
         sem_close(g_sem);
-        // NOTA: não fazemos sem_unlink aqui, para evitar condições no shutdown
+        // NOTE: Do not call sem_unlink here to avoid race conditions on shutdown
     }
 }
 
+// #########################################################################################################
+// Write a log entry (with semaphore + automatic rotation)
+// #########################################################################################################
 
-// ###################################################################################################################
-// Escreve uma entrada no log (com semáforo + rotação automática)
-// ###################################################################################################################
-void logger_write(const char* ip,
-                  const char* method,
-                  const char* path,
-                  int status,
-                  size_t bytes_sent,
-                  long duration_ms)
-{
-    if (!g_sem || g_log_fd < 0)
+// Writes a log entry with the specified parameters.
+void logger_write(
+    const char* ip, // Client IP address
+    const char* method, // HTTP method
+    const char* path, // Request path
+    int status, // HTTP status code
+    size_t bytes_sent, // Number of bytes sent
+    long duration_ms // Request duration in milliseconds
+) {
+
+    // Validate input parameters
+    if (!g_sem || g_log_fd < 0) {
         return;
-
-    // Entrar na secção crítica (bloqueia processos + threads)
-    sem_wait(g_sem);
-
-    // Verificar se excedemos o tamanho máximo → rotacionar
-    off_t size_now = get_file_size(g_log_fd);
-    if (size_now >= LOG_MAX_SIZE){
-        rotate_logs();
     }
 
-    // Obter timestamp formatado
-    char datebuf[64];
-    time_t now = time(NULL);
-    struct tm tm_now;
-    localtime_r(&now, &tm_now);
-    strftime(datebuf, sizeof(datebuf), "%d/%b/%Y:%H:%M:%S", &tm_now);
+    // Enter critical section (locks processes + threads)
+    sem_wait(g_sem); 
 
-    // Formatar a linha
-    char line[1024];
-    int len = snprintf(
-        line, sizeof(line),
+    // Check if log file exceeds max size → rotate if needed
+    // get_file_size -> Get current file size
+    off_t size_now = get_file_size(g_log_fd); // Current log file size
+
+    // Rotate logs if size exceeds limit
+    if (size_now >= LOG_MAX_SIZE) {
+        rotate_logs(); // Perform log rotation
+    }
+
+    // Get formatted timestamp
+    char datebuf[64]; // Buffer for date string
+
+    time_t now = time(NULL); // Current time
+
+    struct tm tm_now; // Local time structure
+
+    localtime_r(&now, &tm_now); // Convert to local time
+
+    strftime(datebuf, sizeof(datebuf), "%d/%b/%Y:%H:%M:%S", &tm_now); // Format date string
+
+    // Format log line
+    char line[1024]; // Buffer for log line
+
+    // snprintf -> Format string into buffer
+    int len = snprintf( 
+        line,
+        sizeof(line),
         "%s [%s] \"%s %s\" %d %zu %ldms\n",
-        ip, datebuf, method, path, status, bytes_sent, duration_ms
+        ip,
+        datebuf,
+        method,
+        path,
+        status,
+        bytes_sent,
+        duration_ms
     );
 
-    if (len > 0){
-        if (write_all(g_log_fd, line, (size_t)len) != 0) {
-            int e = errno;
-            dprintf(STDERR_FILENO, "logger: write failed: %s\n", strerror(e));
-        }
+    // Write log line atomically
+    if (len > 0) {
+        write(g_log_fd, line, (size_t)len);
     }
 
-    // Sair da secção crítica
+    // Leave critical section
     sem_post(g_sem);
 }

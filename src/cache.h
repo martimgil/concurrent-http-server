@@ -5,45 +5,47 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-/* Tipos opacos */
-typedef struct file_cache file_cache_t;
-typedef struct cache_entry cache_entry_t;
+/* Opaque types */
+typedef struct file_cache file_cache_t; // File cache structure
+typedef struct cache_entry cache_entry_t; // Cache entry structure
 
-/* Handle “pinado” para impedir a expulsão enquanto está a ser usado */
+/* Handle "pinned" to prevent eviction while in use */
 typedef struct {
-    const uint8_t *data;  /* ponteiro RO para o conteúdo */
-    size_t size;          /* tamanho do ficheiro */
-    cache_entry_t *_entry;/* uso interno */
+    const uint8_t *data;    /* Read-only pointer to file contents */
+    size_t size;            /* File size in bytes */
+    cache_entry_t *_entry;  /* Internal use only */
 } cache_handle_t;
 
-/* Cria cache LRU com capacidade máxima em bytes. */
+/* Create an LRU cache with a maximum capacity in bytes */
 file_cache_t *cache_create(size_t capacity_bytes);
 
-/* Destroi a cache e liberta memória. */
-void cache_destroy(file_cache_t *c);
+/* Destroy the cache and free all memory */
+void cache_destroy(file_cache_t *cache);
 
-/* Tenta obter (pin) uma entrada existente. Retorna true em sucesso. */
-bool cache_acquire(file_cache_t *c, const char *key, cache_handle_t *out);
+/* Try to acquire (pin) an existing entry. Returns true on success */
+bool cache_acquire(file_cache_t *cache, const char *key, cache_handle_t *out);
 
-/* Liberta o pin da entrada. */
-void cache_release(file_cache_t *c, cache_handle_t *h);
+/* Release the pin on an entry */
+void cache_release(file_cache_t *cache, cache_handle_t *handle);
 
-/* Carrega um ficheiro do FS para a cache (ou reusa entrada existente).
- * key: chave lógica (ex.: path HTTP)
- * abs_path: caminho absoluto no FS
+/* Load a file from the filesystem into the cache (or reuse existing entry)
+ * key: logical key (e.g., HTTP path)
+ * abs_path: absolute filesystem path
  */
-bool cache_load_file(file_cache_t *c, const char *key, const char *abs_path, cache_handle_t *out);
+bool cache_load_file(file_cache_t *cache, const char *key, const char *abs_path, cache_handle_t *out);
 
-/* Invalida uma entrada (se não estiver em uso). */
-bool cache_invalidate(file_cache_t *c, const char *key);
+/* Invalidate an entry (if not in use). Returns true if invalidated */
+bool cache_invalidate(file_cache_t *cache, const char *key);
 
-/* Estatísticas (qualquer ponteiro pode ser NULL). */
-void cache_stats(file_cache_t *c,
-                 size_t *out_items,
-                 size_t *out_bytes,
-                 size_t *out_capacity,
-                 size_t *out_hits,
-                 size_t *out_misses,
-                 size_t *out_evictions);
+/* Cache statistics (any pointer can be NULL) */
+void cache_stats(
+    file_cache_t *cache, // Cache instance
+    size_t *out_items, // Number of items
+    size_t *out_bytes, // Used bytes
+    size_t *out_capacity, // Capacity in bytes
+    size_t *out_hits, // Cache hits
+    size_t *out_misses, // Cache misses
+    size_t *out_evictions // Cache evictions
+);
 
-#endif /* TRABALHO2_SO_CACHE_H */
+#endif 

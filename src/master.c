@@ -261,7 +261,7 @@ int main(int argc, char* argv[]) {
 
     semaphores_t* sems = init_semaphore_system(config.max_queue_size);
     if (!sems) {
-        destroy_shared_memory(shm);
+        shm_destroy(shm);
         return 1;
     }
 
@@ -272,7 +272,7 @@ int main(int argc, char* argv[]) {
     if (listen_fd < 0) {
         destroy_semaphores(sems);
         free(sems);
-        destroy_shared_memory(shm);
+        shm_destroy(shm);
         return 1;
     }
 
@@ -288,7 +288,7 @@ int main(int argc, char* argv[]) {
         close(listen_fd);
         destroy_semaphores(sems);
         free(sems);
-        destroy_shared_memory(shm);
+        shm_destroy(shm);
         free(pids); free(parent_end);
         return 1;
     }
@@ -302,7 +302,7 @@ int main(int argc, char* argv[]) {
             close(listen_fd);
             destroy_semaphores(sems);
             free(sems);
-            destroy_shared_memory(shm);
+            shm_destroy(shm);
             free(pids); free(parent_end);
             return 1;
         }
@@ -315,7 +315,7 @@ int main(int argc, char* argv[]) {
             close(listen_fd);
             destroy_semaphores(sems);
             free(sems);
-            destroy_shared_memory(shm);
+            shm_destroy(shm);
             free(pids); free(parent_end);
             return 1;
         }
@@ -417,7 +417,7 @@ int main(int argc, char* argv[]) {
     // Libertar recursos do master
     destroy_semaphores(sems);
     free(sems);
-    destroy_shared_memory(shm);
+    shm_destroy(shm);
     free(pids);
     free(parent_end);
 
