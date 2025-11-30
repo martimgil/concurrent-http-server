@@ -5,7 +5,6 @@
 #include <string.h>
 #include <strings.h>   // strcasecmp
 #include <stdio.h>
-#include <semaphore.h> // For log_request function
 #include "worker.h"    // worker_get_cache(), worker_get_document_root()
 #include "cache.h"     // file_cache_t (Feature 4: cache per worker)
 #include "logger.h"    // logger_write (Feature 5: thread-safe/process-safe logging)
@@ -27,11 +26,6 @@ int parse_http_request(const char* raw, http_request_t* out_req);
 // send_http_response -> Implemented in http_builder.c
 void send_http_response(int fd, int status, const char* status_msg,
                         const char* content_type, const char* body, size_t body_len);
-
-// log_request -> Implemented in thread_logger.c
-// Logs HTTP requests in a thread-safe manner
-void log_request(sem_t* log_sem, const char* client_ip, const char* method, 
-                 const char* path, int status, size_t bytes);
 
 // ----------------------------------------------------------------------------------------
 // ----------------------------------------------------------------------------------------
@@ -118,7 +112,6 @@ void handle_client_request(int client_fd, shared_data_t* shm, semaphores_t* sems
 
         // Logging (Feature 5) - Log malformed HTTP request
         logger_write("127.0.0.1", "?", "?", status_code, (size_t)bytes_sent, end_time - start_time);
-        log_request(sems->log_mutex, "127.0.0.1", "?", "?", status_code, (size_t)bytes_sent);
 
         close(client_fd); // Close the client connection
         return;
@@ -138,7 +131,6 @@ void handle_client_request(int client_fd, shared_data_t* shm, semaphores_t* sems
 
         // Logging (Feature 5) - Log unsupported HTTP method
         logger_write("127.0.0.1", req.method, req.path, status_code, (size_t)bytes_sent, end_time - start_time);
-        log_request(sems->log_mutex, "127.0.0.1", req.method, req.path, status_code, (size_t)bytes_sent);
 
         close(client_fd); // Close the client connection
         return;
@@ -191,9 +183,8 @@ void handle_client_request(int client_fd, shared_data_t* shm, semaphores_t* sems
         long end_time = get_time_ms(); // Get the end time for processing
         update_stats(shm, sems, status_code, bytes_sent, end_time - start_time); // Update statistics
 
-        // Logging (Feature 5) - calls log_request for detailed HTTP request logging (cache hit)
+        // Logging (Feature 5) - Log successful response from cache
         logger_write("127.0.0.1", req.method, req.path, status_code, (size_t)bytes_sent, end_time - start_time);
-        log_request(sems->log_mutex, "127.0.0.1", req.method, req.path, status_code, (size_t)bytes_sent);
 
         close(client_fd); // Close the client connection
         return;
@@ -212,7 +203,6 @@ void handle_client_request(int client_fd, shared_data_t* shm, semaphores_t* sems
 
         // Logging (Feature 5) - Log failed file access attempt
         logger_write("127.0.0.1", req.method, req.path, status_code, (size_t)bytes_sent, end_time - start_time);
-        log_request(sems->log_mutex, "127.0.0.1", req.method, req.path, status_code, (size_t)bytes_sent);
 
         close(client_fd); // Close the client connection
         return;
@@ -232,7 +222,6 @@ void handle_client_request(int client_fd, shared_data_t* shm, semaphores_t* sems
 
         // Logging (Feature 5) - Log file I/O error during cache load
         logger_write("127.0.0.1", req.method, req.path, status_code, (size_t)bytes_sent, end_time - start_time);
-        log_request(sems->log_mutex, "127.0.0.1", req.method, req.path, status_code, (size_t)bytes_sent);
 
         close(client_fd); // Close the client connection
         return;
@@ -258,7 +247,6 @@ void handle_client_request(int client_fd, shared_data_t* shm, semaphores_t* sems
 
         // Logging (Feature 5) - Log successful request (cache miss but file loaded successfully)
         logger_write("127.0.0.1", req.method, req.path, status_code, (size_t)bytes_sent, end_time - start_time);
-        log_request(sems->log_mutex, "127.0.0.1", req.method, req.path, status_code, (size_t)bytes_sent);
     }
 
     // Close the client socket connection

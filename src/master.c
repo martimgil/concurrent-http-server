@@ -30,6 +30,7 @@
 #include "semaphores.h"   // init_semaphores(), destroy_semaphores()
 #include "worker.h"       // worker_init_resources(), worker_main(), worker_shutdown_resources()
 #include "logger.h"       // logger_init/logger_close (Feature 5)
+#include "stats.h"        // print_stats() (Feature 1: statistics tracking)
 
 // ###################################################################################################################
 // Global state and signal handlers for the master process
@@ -213,7 +214,7 @@ static shared_data_t* init_shared_memory(int queue_size) {
     return shm;
 }
 
-// Semáforos reais: init_semaphores(), destroy_semaphores()
+// Real Semaphores: init_semaphores(), destroy_semaphores()
 static semaphores_t* init_semaphore_system(int queue_size) {
 
     semaphores_t* sems = (semaphores_t*)malloc(sizeof(semaphores_t));
@@ -320,9 +321,6 @@ int main(int argc, char* argv[]) {
     // ---------------------------------------------------------------------------------------------------------------
     // 3) Shared memory and semaphores
     // ---------------------------------------------------------------------------------------------------------------
-    shared_data_t* shm = init_shared_memory(config.max_queue_size); // Initialize shared memory
-    
-    // Check for errors
     shared_data_t* shm = init_shared_memory(config.max_queue_size); // Initialize shared memory
     
     // Check for errors

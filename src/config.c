@@ -80,6 +80,30 @@ int load_config(const char* filename, server_config_t* config) {
 
                 // Ensure null-termination of the string
                 config->document_root[sizeof(config->document_root) - 1] = '\0';
+
+            } else if (strcmp(key, "LOG_FILE") == 0) {
+
+                // Copy the log file path into the configuration structure
+                // config->log_file -> Log file path in the configuration structure
+                strncpy(config->log_file, value, sizeof(config->log_file) - 1);
+
+                // Ensure null-termination of the string
+                config->log_file[sizeof(config->log_file) - 1] = '\0';
+
+            } else if (strcmp(key, "MAX_QUEUE_SIZE") == 0) {
+
+                // Convert the max queue size from string to integer
+                config->max_queue_size = atoi(value);
+
+            } else if (strcmp(key, "CACHE_SIZE_MB") == 0) {
+
+                // Convert the cache size from string to integer
+                config->cache_size_mb = atoi(value);
+
+            } else if (strcmp(key, "TIMEOUT_SECONDS") == 0) {
+
+                // Convert the timeout duration from string to integer
+                config->timeout_seconds = atoi(value);
             }
         }
     }
