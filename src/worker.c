@@ -178,84 +178,29 @@ void worker_main(shared_data_t* shm, semaphores_t* sems, int worker_id, int chan
     thread_pool_t* pool = create_thread_pool(10, shm, sems);
 
     printf("Worker %d: Starting main loop.\n", worker_id);
+    fflush(stdout);
 
     while (worker_running) {
-        // Wait for an available connection in the queue
-        // Handle EINTR so that Ctrl+C/SIGTERM can wake up the worker
-        while (worker_running) {
-            if (sem_wait(sems->filled_slots) == 0) break;
-            if (errno == EINTR) {
-                if (!worker_running) break;  // exit on shutdown
-                continue;  // transient signal — retry wait
-            }
-            perror("Worker sem_wait(filled_slots) error");
-            // non-EINTR error: try to continue the main loop
-            break;
-        }
-        if (!worker_running) break;
-
-        // Exclusive access to queue
-        while (worker_running) {
-            if (sem_wait(sems->queue_mutex) == 0) break;
-            if (errno == EINTR) {
-                if (!worker_running) break;
-                continue;
-            }
-            perror("Worker sem_wait(queue_mutex) error");
-            // Failed to acquire mutex: return filled slot to not lose signal
-            sem_post(sems->filled_slots);
-            // and proceed to next cycle
-            goto next_iteration;
-        }
-        if (!worker_running) {
-            // if exiting due to shutdown, do not leave mutex locked
-            // (only entered while if lock was acquired)
-            // so nothing to do
-            break;
-        }
-
-        // Dequeue client socket (not used here, as we receive via UNIX socket)
-        int ignore_fd = shm->queue.sockets[shm->queue.front];
-        (void)ignore_fd;
-
-        // Update queue front and count
-        shm->queue.front = (shm->queue.front + 1) % MAX_QUEUE_SIZE;
-        shm->queue.count--;
-
-        // Unlock the queue and signal that a slot is now free
-        sem_post(sems->queue_mutex);
-        sem_post(sems->empty_slots);
-
         // Receive the client file descriptor from the master via UNIX socket
-        // channel_fd -> Channel file descriptor
-        // recv_fd -> Function to receive file descriptor
-        // client_fd -> Client socket file descriptor
-        {
-            int client_fd = recv_fd(channel_fd);
+        // This call blocks until the master sends an FD to this specific worker
+        int client_fd = recv_fd(channel_fd);
 
-            // Error handling
-            if (client_fd < 0) {
-                if (!worker_running) break; // shutdown: sair
-                fprintf(stderr, "Worker %d: Falha ao receber descritor real.\n", worker_id);
-                goto next_iteration;
-            }
-
-            // Process the client request
-            printf("Worker %d: Processing client socket %d\n", worker_id, client_fd);
-            
-            // Submit the client request to the thread pool
-            // thread_pool_submit -> entrega o descritor para processamento assíncrono
-            // O handler associado ao pool deve:
-            //   1) Interpretar o pedido HTTP
-            //   2) Consultar/usar a cache com worker_get_cache()
-            //   3) Obter o document root com worker_get_document_root()
-            //   4) Escrever a resposta no socket
-            //   5) Fechar o socket no fim do processamento
-            thread_pool_submit(pool, client_fd);
+        // Error handling
+        if (client_fd < 0) {
+            if (!worker_running) break; // shutdown: exit gracefully
+            // On error (but not shutdown), continue trying
+            continue;
         }
 
-    next_iteration:
-        ; // no-op label target
+        // Process the client request
+        // Submit the client request to the thread pool
+        // The handler will:
+        //   1) Parse the HTTP request
+        //   2) Use the cache via worker_get_cache()
+        //   3) Get the document root via worker_get_document_root()
+        //   4) Send the response
+        //   5) Close the socket when done
+        thread_pool_submit(pool, client_fd);
     }
 
     // Cleanup: destroy the thread pool before exiting

@@ -14,10 +14,11 @@
 // ----------------------------------------------------------------------------------------
 
 // Minimal structure used by HTTP parser (compatible with http_parser.c)
+// NOTE: Field sizes MUST match exactly with http_parser.c definition!
 typedef struct {
-    char method[8];
-    char path[512];
-    char version[16];
+    char method[16];   // HTTP method (e.g., GET, POST) - must match http_parser.c
+    char path[512];    // Request path (e.g., /index.html)
+    char version[16];  // HTTP version (e.g., HTTP/1.1)
 } http_request_t;
 
 // parse_http_request -> Implemented in http_parser.c
@@ -190,6 +191,7 @@ void handle_client_request(int client_fd, shared_data_t* shm, semaphores_t* sems
         return;
     }
 
+    // 2) MISS: Check if file exists on the file system
     // 2) MISS: Check if file exists on the file system
     if (access(abs_path, F_OK) != 0){
         // File does not exist → 404 Not Found response

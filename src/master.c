@@ -231,41 +231,6 @@ static semaphores_t* init_semaphore_system(int queue_size) {
 
     return sems;
 }
-// ###################################################################################################################
-// Enqueue in the shared queue (signaling capacity/count)
-// The worker ignores the stored value (since it receives the real FD via SCM_RIGHTS).
-// ###################################################################################################################
-
-// Returns 0 on success; -1 on error
-static int enqueue_connection(shared_data_t* shm, semaphores_t* sems, int placeholder_fd) {
-
-    // Wait for a free slot
-    if (sem_wait(sems->empty_slots) != 0) {
-        perror("sem_wait(empty_slots)");
-        return -1;
-    }
-
-    // Critical section for queue access
-    if (sem_wait(sems->queue_mutex) != 0) {
-        perror("sem_wait(queue_mutex)");
-        // Restore the free slot in case of failure
-        sem_post(sems->empty_slots);
-        return -1;
-    }
-
-    // Insert at position rear (front + count) % MAX_QUEUE_SIZE
-    int pos = (shm->queue.front + shm->queue.count) % MAX_QUEUE_SIZE;
-    shm->queue.sockets[pos] = placeholder_fd; // marker (will not be used by the worker)
-    shm->queue.count++;
-
-    // Release critical section
-    sem_post(sems->queue_mutex);
-
-    // Signal available item
-    sem_post(sems->filled_slots);
-
-    return 0;
-}
 
 // ###################################################################################################################
 // Main function of the master process
@@ -460,26 +425,16 @@ int main(int argc, char* argv[]) {
             continue;
         }
 
-        // (Optional) Make non-blocking:
-        // int flags = fcntl(client_fd, F_GETFL, 0);
-        // fcntl(client_fd, F_SETFL, flags | O_NONBLOCK);
-
-        // Enqueue marker in the shared queue (capacity/count)
-        if (enqueue_connection(shm, sems, client_fd) != 0) {
-            // If the queue is full or semaphore error, reject connection
-            close(client_fd);
-            continue;
-        }
-
         // Choose worker by round-robin
         int w = rr;
         rr = (rr + 1) % num_workers;
 
-        // Send the real FD to worker “w” via SCM_RIGHTS
+        // Send the real FD to worker "w" via SCM_RIGHTS
+        // Worker will block on recv_fd until this arrives
         if (send_fd(parent_end[w], client_fd) != 0) {
-            // If sending fails, close locally
+            fprintf(stderr, "MASTER: Failed to send FD to worker %d\n", w);
             close(client_fd);
-            // (Optional) log statistics/error
+            continue;
         }
 
         // The master no longer needs the FD after sending it
