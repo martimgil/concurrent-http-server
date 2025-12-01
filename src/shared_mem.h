@@ -15,9 +15,14 @@ typedef struct {
 
 // FEATURE 1: Bounded circular buffer in shared memory (size: 100 connections)
 // Structure to hold the connection queue in shared memory
-// Circular buffer to hold client socket file descriptors
+// Circular buffer to hold connection items
 typedef struct {
-    int sockets[MAX_QUEUE_SIZE]; // Array to hold client socket file descriptors
+    int worker_id; // Worker ID this connection is assigned to
+    int placeholder_fd; // Placeholder file descriptor (not the actual FD, since FDs can't be shared)
+} connection_item_t;
+
+typedef struct {
+    connection_item_t items[MAX_QUEUE_SIZE]; // Array to hold connection items
     int front; // Index of the front of the queue
     int rear; // Index of the rear of the queue
     int count; // Number of elements in the queue

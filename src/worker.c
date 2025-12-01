@@ -157,6 +157,71 @@ void worker_shutdown_resources(void) {
 // FEATURE 1: Connection Queue Consumer
 // ###################################################################################################################
 
+// Dequeue a connection from the shared queue
+// Returns the connection_item_t if successful, or {-1, -1} on error
+static connection_item_t dequeue_connection(shared_data_t* shm, semaphores_t* sems) {
+    connection_item_t item = {-1, -1};
+
+    // Wait for an available item
+    if (sem_wait(sems->filled_slots) != 0) {
+        perror("sem_wait(filled_slots)");
+        return item;
+    }
+
+    // Critical section for queue access
+    if (sem_wait(sems->queue_mutex) != 0) {
+        perror("sem_wait(queue_mutex)");
+        // Restore the filled slot in case of failure
+        sem_post(sems->filled_slots);
+        return item;
+    }
+
+    // Remove from front
+    if (shm->queue.count > 0) {
+        item = shm->queue.items[shm->queue.front];
+        shm->queue.front = (shm->queue.front + 1) % MAX_QUEUE_SIZE;
+        shm->queue.count--;
+    }
+
+    // Release critical section
+    sem_post(sems->queue_mutex);
+
+    // Signal free slot
+    sem_post(sems->empty_slots);
+
+    return item;
+}
+
+// Re-enqueue a connection item (used when dequeued item is not for this worker)
+static int re_enqueue_connection(shared_data_t* shm, semaphores_t* sems, connection_item_t item) {
+    // Wait for a free slot
+    if (sem_wait(sems->empty_slots) != 0) {
+        perror("sem_wait(empty_slots)");
+        return -1;
+    }
+
+    // Critical section for queue access
+    if (sem_wait(sems->queue_mutex) != 0) {
+        perror("sem_wait(queue_mutex)");
+        // Restore the free slot in case of failure
+        sem_post(sems->empty_slots);
+        return -1;
+    }
+
+    // Insert at position rear (front + count) % MAX_QUEUE_SIZE
+    int pos = (shm->queue.front + shm->queue.count) % MAX_QUEUE_SIZE;
+    shm->queue.items[pos] = item;
+    shm->queue.count++;
+
+    // Release critical section
+    sem_post(sems->queue_mutex);
+
+    // Signal available item
+    sem_post(sems->filled_slots);
+
+    return 0;
+}
+
 /**
  * Worker main function.
  * Waits for connections in the shared memory queue, receives the client socket
@@ -181,8 +246,26 @@ void worker_main(shared_data_t* shm, semaphores_t* sems, int worker_id, int chan
     fflush(stdout);
 
     while (worker_running) {
-        // Receive the client file descriptor from the master via UNIX socket
-        // This call blocks until the master sends an FD to this specific worker
+        // First, dequeue a connection item from the shared queue
+        connection_item_t item = dequeue_connection(shm, sems);
+
+        // Check if dequeue was successful
+        if (item.worker_id == -1) {
+            if (!worker_running) break; // shutdown
+            continue; // error, try again
+        }
+
+
+        // Check if this connection is for this worker
+        if (item.worker_id != worker_id) {
+            // Not for this worker, re-enqueue
+            if (re_enqueue_connection(shm, sems, item) != 0) {
+            }
+            continue;
+        }
+
+
+        // This connection is for this worker, now receive the FD via UNIX socket
         int client_fd = recv_fd(channel_fd);
 
         // Error handling
@@ -191,6 +274,7 @@ void worker_main(shared_data_t* shm, semaphores_t* sems, int worker_id, int chan
             // On error (but not shutdown), continue trying
             continue;
         }
+
 
         // Process the client request
         // Submit the client request to the thread pool

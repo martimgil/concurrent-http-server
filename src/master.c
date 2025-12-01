@@ -53,7 +53,7 @@ void stats_timer_handler(int signum){
 }
 // Signal handler for graceful shutdown of the master process
 static void master_signal_handler(int signum) {
-    (void)signum;
+    fprintf(stderr, "MASTER: Received signal %d, shutting down\n", signum);
     master_running = 0;
 }
 
@@ -208,7 +208,6 @@ static shared_data_t* init_shared_memory(int queue_size) {
     // It is expected that the shared_mem module handles shm_open/ftruncate/mmap/init of the queue (front=0,count=0)
     shared_data_t* shm = create_shared_memory(queue_size);
     if (!shm) {
-        fprintf(stderr, "MASTER: shared_mem_create() failed.\n");
         return NULL;
     }
     return shm;
@@ -219,17 +218,52 @@ static semaphores_t* init_semaphore_system(int queue_size) {
 
     semaphores_t* sems = (semaphores_t*)malloc(sizeof(semaphores_t));
     if (!sems) {
-        fprintf(stderr, "MASTER: malloc failed for semaphores\n");
         return NULL;
     }
 
     if (init_semaphores(sems, queue_size) != 0) {
-        fprintf(stderr, "MASTER: init_semaphores() failed\n");
         free(sems);
         return NULL;
     }
 
     return sems;
+}
+
+// ###################################################################################################################
+// Enqueue in the shared queue (signaling capacity/count)
+// The worker ignores the stored value (since it receives the real FD via SCM_RIGHTS).
+// ###################################################################################################################
+
+// Returns 0 on success; -1 on error
+static int enqueue_connection(shared_data_t* shm, semaphores_t* sems, int worker_id, int placeholder_fd) {
+
+    // Wait for a free slot
+    if (sem_wait(sems->empty_slots) != 0) {
+        perror("sem_wait(empty_slots)");
+        return -1;
+    }
+
+    // Critical section for queue access
+    if (sem_wait(sems->queue_mutex) != 0) {
+        perror("sem_wait(queue_mutex)");
+        // Restore the free slot in case of failure
+        sem_post(sems->empty_slots);
+        return -1;
+    }
+
+    // Insert at position rear (front + count) % MAX_QUEUE_SIZE
+    int pos = (shm->queue.front + shm->queue.count) % MAX_QUEUE_SIZE;
+    shm->queue.items[pos].worker_id = worker_id;
+    shm->queue.items[pos].placeholder_fd = placeholder_fd;
+    shm->queue.count++;
+
+    // Release critical section
+    sem_post(sems->queue_mutex);
+
+    // Signal available item
+    sem_post(sems->filled_slots);
+
+    return 0;
 }
 
 // ###################################################################################################################
@@ -269,9 +303,9 @@ int main(int argc, char* argv[]) {
 
     // Load configuration from file
     if (load_config(conf_path, &config) != 0) {
-        fprintf(stderr, "MASTER: Using defaults (failed to load %s)\n", conf_path); // Error loading config
+        fprintf(stderr, "MASTER: Failed to load config from %s, using defaults\n", conf_path);
     } else {
-        fprintf(stderr, "MASTER: Config loaded from %s\n", conf_path); // Success
+        fprintf(stderr, "MASTER: Config loaded from %s\n", conf_path);
     }
 
     // ADDED: initialize the global logger (Feature 5)
@@ -323,7 +357,6 @@ int main(int argc, char* argv[]) {
 
     // Check for allocation errors
     if (!pids || !parent_end) {
-        fprintf(stderr, "MASTER: alloc failed\n"); // Allocation failure
 
         close(listen_fd); // Close listen socket
 
@@ -344,7 +377,6 @@ int main(int argc, char* argv[]) {
 
         // Create UNIX domain socketpair for master<->worker communication
         if (create_worker_channel(sv) != 0) {
-            fprintf(stderr, "MASTER: failed to create channel for worker %d\n", i); // Error
 
             // partial cleanup
             for (int k = 0; k < i; ++k) close(parent_end[k]); // close already created channels
@@ -405,7 +437,6 @@ int main(int argc, char* argv[]) {
         close(sv[1]);          // close the worker's end in the master
     }
 
-    fprintf(stderr, "MASTER: listening on port %d with %d workers.\n", config.port, num_workers);
 
     // ---------------------------------------------------------------------------------------------------------------
     // 6) Main event loop: Accept incoming connections and distribute them to workers in round-robin fashion
@@ -429,13 +460,21 @@ int main(int argc, char* argv[]) {
         int w = rr;
         rr = (rr + 1) % num_workers;
 
-        // Send the real FD to worker "w" via SCM_RIGHTS
-        // Worker will block on recv_fd until this arrives
-        if (send_fd(parent_end[w], client_fd) != 0) {
-            fprintf(stderr, "MASTER: Failed to send FD to worker %d\n", w);
+        // Enqueue the connection in the shared queue for the chosen worker
+        if (enqueue_connection(shm, sems, w, client_fd) != 0) {
+            // If the queue is full or semaphore error, reject connection
             close(client_fd);
             continue;
         }
+
+
+        // Send the real FD to worker "w" via SCM_RIGHTS
+        // Worker will dequeue the item and then receive the FD
+        if (send_fd(parent_end[w], client_fd) != 0) {
+            close(client_fd);
+            continue;
+        }
+
 
         // The master no longer needs the FD after sending it
         close(client_fd);
@@ -444,7 +483,6 @@ int main(int argc, char* argv[]) {
     // ---------------------------------------------------------------------------------------------------------------
     // 7) Graceful shutdown
     // ---------------------------------------------------------------------------------------------------------------
-    fprintf(stderr, "MASTER: shutting down...\n");
 
     // Close listen socket
     close(listen_fd);
@@ -473,6 +511,5 @@ int main(int argc, char* argv[]) {
     // ADDED: close the global logger
     logger_close();
 
-    fprintf(stderr, "MASTER: bye.\n");
     return 0;
 }
