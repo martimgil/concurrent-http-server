@@ -72,6 +72,16 @@ debug: clean all
 install-deps:
 	@echo "No external dependencies required."
 
+# Run tests
+test: $(TARGET)
+	@echo "Running test suite..."
+	./tests/test_suite.sh
+
+# Build tests
+build-tests: $(TARGET)
+	@echo "Building test binaries..."
+	gcc -Wall -Wextra -pthread -g -O2 -Isrc tests/test_concurrent.c build/cache.o -o tests/test_cache_consistency
+
 # Display help
 help:
 	@echo "Available targets:"
@@ -79,6 +89,8 @@ help:
 	@echo "  clean               - Remove all build artifacts"
 	@echo "  run                 - Build and run the server"
 	@echo "  debug               - Build with debug symbols"
+	@echo "  test                - Run the test suite"
+	@echo "  build-tests         - Build test binaries"
 	@echo "  install-deps        - Install required dependencies"
 	@echo "  help                - Display this help message"
 	@echo ""
@@ -88,4 +100,4 @@ help:
 	@echo "  ./tests/test_suite.sh                   - Run tests normally"
 
 # Phony targets
-.PHONY: all clean run debug install-deps help directories
+.PHONY: all clean run debug install-deps help directories test build-tests
