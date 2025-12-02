@@ -2,8 +2,8 @@
 
 # Compiler and flags
 CC = gcc
-CFLAGS = -Wall -Wextra -pthread -g -O2 -MMD -MP
-LDFLAGS = -pthread -lrt
+CFLAGS = -Wall -Wextra -pthread -g -O2 -MMD -MP $(CFLAGS_EXTRA)
+LDFLAGS = -pthread -lrt $(LDFLAGS_EXTRA)
 
 # Directories
 SRC_DIR = src
@@ -75,12 +75,17 @@ install-deps:
 # Display help
 help:
 	@echo "Available targets:"
-	@echo "  all          - Build the project (default)"
-	@echo "  clean        - Remove all build artifacts"
-	@echo "  run          - Build and run the server"
-	@echo "  debug        - Build with debug symbols"
-	@echo "  install-deps - Install required dependencies"
-	@echo "  help         - Display this help message"
+	@echo "  all                 - Build the project (default)"
+	@echo "  clean               - Remove all build artifacts"
+	@echo "  run                 - Build and run the server"
+	@echo "  debug               - Build with debug symbols"
+	@echo "  install-deps        - Install required dependencies"
+	@echo "  help                - Display this help message"
+	@echo ""
+	@echo "Automated race detection (no manual make needed):"
+	@echo "  ./tests/test_suite.sh --race-helgrind   - Run tests with Helgrind"
+	@echo "  ./tests/test_suite.sh --race-tsan       - Run tests with Thread Sanitizer"
+	@echo "  ./tests/test_suite.sh                   - Run tests normally"
 
 # Phony targets
 .PHONY: all clean run debug install-deps help directories

@@ -1,2 +1,129 @@
 MASTER: Config loaded from server.conf
-bind: Address already in use
+Worker: Cache initialized with 2621440 bytes. DOCROOT=./www
+Worker: Cache initialized with 2621440 bytes. DOCROOT=./www
+Worker: Cache initialized with 2621440 bytes. DOCROOT=./www
+Worker: Cache initialized with 2621440 bytes. DOCROOT=./www
+Worker 0: Starting main loop.
+Worker 1: Starting main loop.
+Worker 2: Starting main loop.
+Worker 3: Starting main loop.
+==================
+WARNING: ThreadSanitizer: data race (pid=69559)
+  Write of size 8 at 0x7d43e140a320 by thread T5:
+    #0 gmtime ../../../../src/libsanitizer/sanitizer_common/sanitizer_common_interceptors.inc:1325 (libtsan.so.2+0x6054a) (BuildId: 38097064631f7912bd33117a9c83d08b42e15571)
+    #1 send_http_response_with_body_flag src/http_builder.c:37 (webserver+0x5554) (BuildId: 2b6b19195eb2ad2f232fe4c471578458ff2267df)
+    #2 handle_client_request src/thread_pool.c:230 (webserver+0x4c02) (BuildId: 2b6b19195eb2ad2f232fe4c471578458ff2267df)
+    #3 worker_thread src/thread_pool.c:478 (webserver+0x5106) (BuildId: 2b6b19195eb2ad2f232fe4c471578458ff2267df)
+
+  Previous write of size 8 at 0x7d43e140a320 by thread T2:
+    #0 gmtime ../../../../src/libsanitizer/sanitizer_common/sanitizer_common_interceptors.inc:1325 (libtsan.so.2+0x6054a) (BuildId: 38097064631f7912bd33117a9c83d08b42e15571)
+    #1 send_http_response_with_body_flag src/http_builder.c:37 (webserver+0x5554) (BuildId: 2b6b19195eb2ad2f232fe4c471578458ff2267df)
+    #2 handle_client_request src/thread_pool.c:352 (webserver+0x4cda) (BuildId: 2b6b19195eb2ad2f232fe4c471578458ff2267df)
+    #3 worker_thread src/thread_pool.c:478 (webserver+0x5106) (BuildId: 2b6b19195eb2ad2f232fe4c471578458ff2267df)
+
+  Location is global '_tmbuf' of size 56 at 0x7d43e140a320 (libc.so.6+0x20a320)
+
+  Thread T5 (tid=69582, running) created by main thread at:
+    #0 pthread_create ../../../../src/libsanitizer/tsan/tsan_interceptors_posix.cpp:1022 (libtsan.so.2+0x5ac1a) (BuildId: 38097064631f7912bd33117a9c83d08b42e15571)
+    #1 create_thread_pool src/thread_pool.c:415 (webserver+0x527e) (BuildId: 2b6b19195eb2ad2f232fe4c471578458ff2267df)
+    #2 worker_main src/worker.c:245 (webserver+0x3e36) (BuildId: 2b6b19195eb2ad2f232fe4c471578458ff2267df)
+    #3 main src/master.c:426 (webserver+0x33ff) (BuildId: 2b6b19195eb2ad2f232fe4c471578458ff2267df)
+
+  Thread T2 (tid=69573, running) created by main thread at:
+    #0 pthread_create ../../../../src/libsanitizer/tsan/tsan_interceptors_posix.cpp:1022 (libtsan.so.2+0x5ac1a) (BuildId: 38097064631f7912bd33117a9c83d08b42e15571)
+    #1 create_thread_pool src/thread_pool.c:415 (webserver+0x527e) (BuildId: 2b6b19195eb2ad2f232fe4c471578458ff2267df)
+    #2 worker_main src/worker.c:245 (webserver+0x3e36) (BuildId: 2b6b19195eb2ad2f232fe4c471578458ff2267df)
+==================
+WARNING: ThreadSanitizer: data race (pid=69567)
+  Write of size 8 at 0x7d43e140a320 by thread T8:
+    #3 main src/master.c:426 (webserver+0x33ff) (BuildId: 2b6b19195eb2ad2f232fe4c471578458ff2267df)
+
+SUMMARY: ThreadSanitizer: data race src/http_builder.c:37 in send_http_response_with_body_flag
+==================
+    #0 gmtime ../../../../src/libsanitizer/sanitizer_common/sanitizer_common_interceptors.inc:1325 (libtsan.so.2+0x6054a) (BuildId: 38097064631f7912bd33117a9c83d08b42e15571)
+    #1 send_http_response_with_body_flag src/http_builder.c:37 (webserver+0x5554) (BuildId: 2b6b19195eb2ad2f232fe4c471578458ff2267df)
+    #2 handle_client_request src/thread_pool.c:230 (webserver+0x4c02) (BuildId: 2b6b19195eb2ad2f232fe4c471578458ff2267df)
+    #3 worker_thread src/thread_pool.c:478 (webserver+0x5106) (BuildId: 2b6b19195eb2ad2f232fe4c471578458ff2267df)
+
+  Previous write of size 8 at 0x7d43e140a320 by thread T2:
+    #0 gmtime ../../../../src/libsanitizer/sanitizer_common/sanitizer_common_interceptors.inc:1325 (libtsan.so.2+0x6054a) (BuildId: 38097064631f7912bd33117a9c83d08b42e15571)
+    #1 send_http_response_with_body_flag src/http_builder.c:37 (webserver+0x5554) (BuildId: 2b6b19195eb2ad2f232fe4c471578458ff2267df)
+    #2 handle_client_request src/thread_pool.c:230 (webserver+0x4c02) (BuildId: 2b6b19195eb2ad2f232fe4c471578458ff2267df)
+    #3 worker_thread src/thread_pool.c:478 (webserver+0x5106) (BuildId: 2b6b19195eb2ad2f232fe4c471578458ff2267df)
+
+  Location is global '_tmbuf' of size 56 at 0x7d43e140a320 (libc.so.6+0x20a320)
+
+  Thread T8 (tid=69598, running) created by main thread at:
+    #0 pthread_create ../../../../src/libsanitizer/tsan/tsan_interceptors_posix.cpp:1022 (libtsan.so.2+0x5ac1a) (BuildId: 38097064631f7912bd33117a9c83d08b42e15571)
+    #1 create_thread_pool src/thread_pool.c:415 (webserver+0x527e) (BuildId: 2b6b19195eb2ad2f232fe4c471578458ff2267df)
+    #2 worker_main src/worker.c:245 (webserver+0x3e36) (BuildId: 2b6b19195eb2ad2f232fe4c471578458ff2267df)
+    #3 main src/master.c:426 (webserver+0x33ff) (BuildId: 2b6b19195eb2ad2f232fe4c471578458ff2267df)
+
+  Thread T2 (tid=69581, running) created by main thread at:
+    #0 pthread_create ../../../../src/libsanitizer/tsan/tsan_interceptors_posix.cpp:1022 (libtsan.so.2+0x5ac1a) (BuildId: 38097064631f7912bd33117a9c83d08b42e15571)
+    #1 create_thread_pool src/thread_pool.c:415 (webserver+0x527e) (BuildId: 2b6b19195eb2ad2f232fe4c471578458ff2267df)
+    #2 worker_main src/worker.c:245 (webserver+0x3e36) (BuildId: 2b6b19195eb2ad2f232fe4c471578458ff2267df)
+    #3 main src/master.c:426 (webserver+0x33ff) (BuildId: 2b6b19195eb2ad2f232fe4c471578458ff2267df)
+
+SUMMARY: ThreadSanitizer: data race src/http_builder.c:37 in send_http_response_with_body_flag
+==================
+==================
+WARNING: ThreadSanitizer: data race (pid=69550)
+  Write of size 8 at 0x7d43e140a320 by thread T5:
+    #0 gmtime ../../../../src/libsanitizer/sanitizer_common/sanitizer_common_interceptors.inc:1325 (libtsan.so.2+0x6054a) (BuildId: 38097064631f7912bd33117a9c83d08b42e15571)
+    #1 send_http_response_with_body_flag src/http_builder.c:37 (webserver+0x5554) (BuildId: 2b6b19195eb2ad2f232fe4c471578458ff2267df)
+    #2 handle_client_request src/thread_pool.c:230 (webserver+0x4c02) (BuildId: 2b6b19195eb2ad2f232fe4c471578458ff2267df)
+    #3 worker_thread src/thread_pool.c:478 (webserver+0x5106) (BuildId: 2b6b19195eb2ad2f232fe4c471578458ff2267df)
+
+  Previous write of size 8 at 0x7d43e140a320 by thread T3:
+    #0 gmtime ../../../../src/libsanitizer/sanitizer_common/sanitizer_common_interceptors.inc:1325 (libtsan.so.2+0x6054a) (BuildId: 38097064631f7912bd33117a9c83d08b42e15571)
+    #1 send_http_response_with_body_flag src/http_builder.c:37 (webserver+0x5554) (BuildId: 2b6b19195eb2ad2f232fe4c471578458ff2267df)
+    #2 handle_client_request src/thread_pool.c:230 (webserver+0x4c02) (BuildId: 2b6b19195eb2ad2f232fe4c471578458ff2267df)
+    #3 worker_thread src/thread_pool.c:478 (webserver+0x5106) (BuildId: 2b6b19195eb2ad2f232fe4c471578458ff2267df)
+
+  Location is global '_tmbuf' of size 56 at 0x7d43e140a320 (libc.so.6+0x20a320)
+
+  Thread T5 (tid=69565, running) created by main thread at:
+    #0 pthread_create ../../../../src/libsanitizer/tsan/tsan_interceptors_posix.cpp:1022 (libtsan.so.2+0x5ac1a) (BuildId: 38097064631f7912bd33117a9c83d08b42e15571)
+    #1 create_thread_pool src/thread_pool.c:415 (webserver+0x527e) (BuildId: 2b6b19195eb2ad2f232fe4c471578458ff2267df)
+    #2 worker_main src/worker.c:245 (webserver+0x3e36) (BuildId: 2b6b19195eb2ad2f232fe4c471578458ff2267df)
+    #3 main src/master.c:426 (webserver+0x33ff) (BuildId: 2b6b19195eb2ad2f232fe4c471578458ff2267df)
+
+  Thread T3 (tid=69560, running) created by main thread at:
+    #0 pthread_create ../../../../src/libsanitizer/tsan/tsan_interceptors_posix.cpp:1022 (libtsan.so.2+0x5ac1a) (BuildId: 38097064631f7912bd33117a9c83d08b42e15571)
+    #1 create_thread_pool src/thread_pool.c:415 (webserver+0x527e) (BuildId: 2b6b19195eb2ad2f232fe4c471578458ff2267df)
+    #2 worker_main src/worker.c:245 (webserver+0x3e36) (BuildId: 2b6b19195eb2ad2f232fe4c471578458ff2267df)
+    #3 main src/master.c:426 (webserver+0x33ff) (BuildId: 2b6b19195eb2ad2f232fe4c471578458ff2267df)
+
+SUMMARY: ThreadSanitizer: data race src/http_builder.c:37 in send_http_response_with_body_flag
+==================
+==================
+WARNING: ThreadSanitizer: data race (pid=69552)
+  Write of size 8 at 0x7d43e140a320 by thread T6:
+    #0 gmtime ../../../../src/libsanitizer/sanitizer_common/sanitizer_common_interceptors.inc:1325 (libtsan.so.2+0x6054a) (BuildId: 38097064631f7912bd33117a9c83d08b42e15571)
+    #1 send_http_response_with_body_flag src/http_builder.c:37 (webserver+0x5554) (BuildId: 2b6b19195eb2ad2f232fe4c471578458ff2267df)
+    #2 handle_client_request src/thread_pool.c:230 (webserver+0x4c02) (BuildId: 2b6b19195eb2ad2f232fe4c471578458ff2267df)
+    #3 worker_thread src/thread_pool.c:478 (webserver+0x5106) (BuildId: 2b6b19195eb2ad2f232fe4c471578458ff2267df)
+
+  Previous write of size 8 at 0x7d43e140a320 by thread T7:
+    #0 gmtime ../../../../src/libsanitizer/sanitizer_common/sanitizer_common_interceptors.inc:1325 (libtsan.so.2+0x6054a) (BuildId: 38097064631f7912bd33117a9c83d08b42e15571)
+    #1 send_http_response_with_body_flag src/http_builder.c:37 (webserver+0x5554) (BuildId: 2b6b19195eb2ad2f232fe4c471578458ff2267df)
+    #2 handle_client_request src/thread_pool.c:230 (webserver+0x4c02) (BuildId: 2b6b19195eb2ad2f232fe4c471578458ff2267df)
+    #3 worker_thread src/thread_pool.c:478 (webserver+0x5106) (BuildId: 2b6b19195eb2ad2f232fe4c471578458ff2267df)
+
+  Location is global '_tmbuf' of size 56 at 0x7d43e140a320 (libc.so.6+0x20a320)
+
+  Thread T6 (tid=69578, running) created by main thread at:
+    #0 pthread_create ../../../../src/libsanitizer/tsan/tsan_interceptors_posix.cpp:1022 (libtsan.so.2+0x5ac1a) (BuildId: 38097064631f7912bd33117a9c83d08b42e15571)
+    #1 create_thread_pool src/thread_pool.c:415 (webserver+0x527e) (BuildId: 2b6b19195eb2ad2f232fe4c471578458ff2267df)
+    #2 worker_main src/worker.c:245 (webserver+0x3e36) (BuildId: 2b6b19195eb2ad2f232fe4c471578458ff2267df)
+    #3 main src/master.c:426 (webserver+0x33ff) (BuildId: 2b6b19195eb2ad2f232fe4c471578458ff2267df)
+
+  Thread T7 (tid=69584, running) created by main thread at:
+    #0 pthread_create ../../../../src/libsanitizer/tsan/tsan_interceptors_posix.cpp:1022 (libtsan.so.2+0x5ac1a) (BuildId: 38097064631f7912bd33117a9c83d08b42e15571)
+    #1 create_thread_pool src/thread_pool.c:415 (webserver+0x527e) (BuildId: 2b6b19195eb2ad2f232fe4c471578458ff2267df)
+    #2 worker_main src/worker.c:245 (webserver+0x3e36) (BuildId: 2b6b19195eb2ad2f232fe4c471578458ff2267df)
+    #3 main src/master.c:426 (webserver+0x33ff) (BuildId: 2b6b19195eb2ad2f232fe4c471578458ff2267df)
+
+SUMMARY: ThreadSanitizer: data race src/http_builder.c:37 in send_http_response_with_body_flag
+==================

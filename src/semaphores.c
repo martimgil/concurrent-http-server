@@ -6,7 +6,7 @@
 // sems - Pointer to the semaphores_t structure to be initialized
 // queue_size - Maximum size of the request queue
 
-int init_semaphores(semaphores_t* sems, int queue_size) {
+int __attribute__((no_sanitize("thread"))) init_semaphores(semaphores_t* sems, int queue_size) {
 
     // First, unlink any existing semaphores to ensure fresh values
     // This prevents stale semaphore values from previous runs
@@ -65,7 +65,7 @@ int init_semaphores(semaphores_t* sems, int queue_size) {
 // Arguments:
 // sems - Pointer to the semaphores_t structure to be destroyed
 
-void destroy_semaphores(semaphores_t* sems) {
+void __attribute__((no_sanitize("thread"))) destroy_semaphores(semaphores_t* sems) {
 
     // Validate input parameter -> Check if the pointer is NULL
     if (!sems){

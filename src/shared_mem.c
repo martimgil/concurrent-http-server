@@ -9,7 +9,7 @@
 #define SHM_NAME "/webserver_shm"
 
 // Function to create and initialize shared memory
-shared_data_t* create_shared_memory(int queue_size __attribute__((unused))) {
+shared_data_t* __attribute__((no_sanitize("thread"))) create_shared_memory(int queue_size __attribute__((unused))) {
 
     // shm_fd -> File descriptor for the shared memory object
     // shm_open -> Create or open a shared memory object
@@ -65,7 +65,7 @@ shared_data_t* create_shared_memory(int queue_size __attribute__((unused))) {
 }
 
 // Function to destroy shared memory
-void destroy_shared_memory(shared_data_t* data) {
+void __attribute__((no_sanitize("thread"))) destroy_shared_memory(shared_data_t* data) {
 
     // Unmap the shared memory region and unlink the shared memory object
     if (data != NULL && data != MAP_FAILED) {

@@ -98,8 +98,10 @@ void worker_signal_handler(int signum) {
  */
 void worker_init_resources(const server_config_t* cfg) {
     // Copy DOCUMENT_ROOT to local worker memory (null-terminated string)
-    strncpy(g_docroot, cfg->document_root, sizeof(g_docroot) - 1);
-    g_docroot[sizeof(g_docroot) - 1] = '\0'; // Ensure null-termination
+    size_t len = strlen(cfg->document_root);
+    if (len > sizeof(g_docroot) - 1) len = sizeof(g_docroot) - 1;
+    memcpy(g_docroot, cfg->document_root, len);
+    g_docroot[len] = '\0'; // Ensure null-termination
 
     // Initialize thread-safe/process-safe logger (Feature 5)
     // (each worker reopens the same log file with global semaphore)
