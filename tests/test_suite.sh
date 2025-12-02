@@ -57,7 +57,7 @@ fi
 $SERVER_BIN & 
 SERVER_PID=$!
 echo "Server PID: $SERVER_PID"
-sleep 2 # Wait for server to start
+sleep 5 # Wait for server to start
 
 # Function to clean on exit
 cleanup(){
@@ -165,7 +165,7 @@ fi
 
 echo "Executing load test with $TOTAL_REQS requests and concurrency of $CONCURRENCY..."
 
-OUTPUT=$(timeout 60 ab -n $TOTAL_REQS -c $CONCURRENCY -k $BASE_URL/index.html 2>&1)
+OUTPUT=$(timeout 60 ab -n $TOTAL_REQS -c $CONCURRENCY -k -r $BASE_URL/index.html 2>&1)
 
 FAILED_REQS=$(echo "$OUTPUT" | grep "Failed requests:" | awk '{print $3}')
 if [ -z "$FAILED_REQS" ]; then FAILED_REQS=0; fi
@@ -183,6 +183,43 @@ else
     echo "$OUTPUT" | grep -E "Failed requests:|Complete requests:" | sed 's/^/    /'
 fi  
 
+sleep 5
+
+echo -e "\n${BOLD}Testing Multiple Parallel Clients (curl) ${NC}"
+PARALLEL_CLIENTS=20
+FAIL_COUNT=0
+PIDS=""
+
+echo "Launching $PARALLEL_CLIENTS parallel clients..."
+
+for i in $(seq 1 $PARALLEL_CLIENTS); do
+    echo $(curl --ipv4 --max-time 5 --keepalive-time 2 -s -o /dev/null -w "%{http_code}" "$BASE_URL/index.html") > "/tmp/http_code_$i.txt" &
+    PIDS="$PIDS $!"
+done
+
+echo "Waiting for clients to finish..."
+wait $PIDS
+
+for i in $(seq 1 $PARALLEL_CLIENTS); do
+    if [ -f "/tmp/http_code_$i.txt" ]; then
+        CODE=$(cat "/tmp/http_code_$i.txt")
+        rm "/tmp/http_code_$i.txt"
+        
+        if [ -z "$CODE" ] || [ "$CODE" -ne 200 ]; then
+            echo -e "${RED}Client $i failed: HTTP $CODE${NC}"
+            ((FAIL_COUNT++))
+        fi
+    else
+        echo -e "${RED}Client $i failed: No output${NC}"
+        ((FAIL_COUNT++))
+    fi
+done
+
+if [ "$FAIL_COUNT" -eq 0 ]; then
+    print_pass "All $PARALLEL_CLIENTS parallel clients received HTTP 200 OK"
+else
+    print_fail "$FAIL_COUNT clients failed to receive HTTP 200 OK"
+fi
 
 # Summary
 echo -e "\n${BOLD}Test Summary:${NC}"

@@ -5,6 +5,9 @@
 #include <string.h>
 #include <strings.h>   // strcasecmp
 #include <stdio.h>
+#include <sys/stat.h>
+#include <time.h>
+#include <sys/socket.h>
 #include "worker.h"    // worker_get_cache(), worker_get_document_root()
 #include "cache.h"     // file_cache_t (Feature 4: cache per worker)
 #include "logger.h"    // logger_write (Feature 5: thread-safe/process-safe logging)
@@ -264,19 +267,78 @@ void handle_client_request(int client_fd, shared_data_t* shm, semaphores_t* sems
 
     // 3) MISS with existing file: Load from disk and insert into cache
     if (!cache_load_file(cache, relpath, abs_path, &h)){
-        // File read failed → 500 Internal Server Error response
-        const char* msg = "<h1>500 Internal Server Error</h1>";
-        send_http_response(client_fd, 500, "Internal Server Error", "text/html", msg, strlen(msg));
-        status_code = 500;
-        bytes_sent = (int)strlen(msg);
-
+        // File too large or read error, try to send directly
+        struct stat st;
+        if (stat(abs_path, &st) == 0 && S_ISREG(st.st_mode)) {
+            size_t file_size = st.st_size;
+            const char* content_type = mime_type_from_path(relpath);
+            // Send headers
+            time_t now = time(NULL);
+            struct tm tm = *gmtime(&now);
+            char date_str[64];
+            strftime(date_str, sizeof(date_str), "%a, %d %b %Y %H:%M:%S GMT", &tm);
+            char header[2048];
+            int header_len = snprintf(header, sizeof(header),
+                "HTTP/1.1 200 OK\r\n"
+                "Content-Type: %s\r\n"
+                "Content-Length: %zu\r\n"
+                "Server: ConcurrentHTTP/1.0\r\n"
+                "Date: %s\r\n"
+                "Connection: close\r\n"
+                "\r\n",
+                content_type, file_size, date_str);
+            if (header_len < 0 || header_len >= (int)sizeof(header)) {
+                const char* msg = "<h1>500 Internal Server Error</h1>";
+                send_http_response(client_fd, 500, "Internal Server Error", "text/html", msg, strlen(msg));
+                status_code = 500;
+                bytes_sent = (int)strlen(msg);
+            } else {
+                // Send header
+                ssize_t total_sent = 0;
+                while (total_sent < header_len) {
+                    ssize_t sent = send(client_fd, header + total_sent, header_len - total_sent, 0);
+                    if (sent <= 0) {
+                        close(client_fd);
+                        return;
+                    }
+                    total_sent += sent;
+                }
+                // Send body if not HEAD
+                if (!is_head_request) {
+                    FILE *f = fopen(abs_path, "rb");
+                    if (f) {
+                        char buf[4096];
+                        size_t bytes_read;
+                        while ((bytes_read = fread(buf, 1, sizeof(buf), f)) > 0) {
+                            total_sent = 0;
+                            while (total_sent < (ssize_t)bytes_read) {
+                                ssize_t sent = send(client_fd, buf + total_sent, bytes_read - total_sent, 0);
+                                if (sent <= 0) {
+                                    fclose(f);
+                                    close(client_fd);
+                                    return;
+                                }
+                                total_sent += sent;
+                            }
+                        }
+                        fclose(f);
+                    }
+                }
+                status_code = 200;
+                bytes_sent = (int)file_size;
+            }
+        } else {
+            // File not accessible
+            const char* msg = "<h1>500 Internal Server Error</h1>";
+            send_http_response(client_fd, 500, "Internal Server Error", "text/html", msg, strlen(msg));
+            status_code = 500;
+            bytes_sent = (int)strlen(msg);
+        }
         // Record end time and update server statistics
         long end_time = get_time_ms(); // Get the end time for processing
         update_stats(shm, sems, status_code, bytes_sent, end_time - start_time); // Update statistics
-
         // Logging (Feature 5) - Log file I/O error during cache load
         logger_write("127.0.0.1", req.method, req.path, status_code, (size_t)bytes_sent, end_time - start_time);
-
         close(client_fd); // Close the client connection
         return;
     }
