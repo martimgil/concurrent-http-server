@@ -9,7 +9,8 @@ BOLD='\033[1m'
 SERVER_BIN="./bin/webserver"
 PORT=8080
 BASE_URL="http://localhost:$PORT"
-WWW_DIR="www"  
+WWW_DIR="www"
+TEST_TIMEOUT=60  # Timeout in seconds
 
 # Counter for passed and failed tests
 TESTS_PASSED=0
@@ -61,8 +62,14 @@ sleep 2 # Wait for server to start
 # Function to clean on exit
 cleanup(){
     echo -e "\n${BOLD}Cleaning up...${NC}"
-    if ps -p $SERVER_PID > /dev/null; then
-        kill $SERVER_PID
+    if ps -p $SERVER_PID > /dev/null 2>&1; then
+        kill -TERM $SERVER_PID 2>/dev/null
+        # Give it 2 seconds to terminate gracefully
+        sleep 2
+        # If still running, force kill
+        if ps -p $SERVER_PID > /dev/null 2>&1; then
+            kill -9 $SERVER_PID 2>/dev/null
+        fi
         wait $SERVER_PID 2>/dev/null
     fi
 }
@@ -72,7 +79,7 @@ trap cleanup EXIT
 echo -e "\n${BOLD}Running Functional Tests - HTTP Basics ${NC}"
 
 # Test 1: GET index.html
-HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" $BASE_URL/index.html)
+HTTP_CODE=$(timeout 5 curl -s -o /dev/null -w "%{http_code}" $BASE_URL/index.html)
 
 if [ "$HTTP_CODE" -eq 200 ]; then
     print_pass "GET /index.html returned 200 OK"
@@ -81,7 +88,7 @@ else
 fi
 
 # Test 2: Correct Content
-CONTENT=$(curl -s $BASE_URL/index.html)
+CONTENT=$(timeout 5 curl -s $BASE_URL/index.html)
 if [[ "$CONTENT" == *"Index Page"* ]]; then
     print_pass "GET /index.html returned correct content"
 else
@@ -89,7 +96,7 @@ else
 fi
 
 # Test 3: 404 Error
-HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" $BASE_URL/nonexistent.html)
+HTTP_CODE=$(timeout 5 curl -s -o /dev/null -w "%{http_code}" $BASE_URL/nonexistent.html)
 if [ "$HTTP_CODE" -eq 404 ]; then
     print_pass "GET /nonexistent.html returned 404 Not Found"
 else
@@ -102,7 +109,7 @@ echo -e "\n${BOLD}Testing MIME Types${NC}"
 check_mime(){
     FILE=$1
     EXPECTED=$2
-    TYPE=$(curl -s -I $BASE_URL/$FILE | grep -i "Content-Type" | awk '{print $2}' | tr -d '\r')
+    TYPE=$(timeout 5 curl -s -I $BASE_URL/$FILE | grep -i "Content-Type" | awk '{print $2}' | tr -d '\r')
 
     if [[ "$TYPE" == *"$EXPECTED"* ]]; then
         print_pass "MIME type for $FILE is $EXPECTED"
@@ -122,25 +129,60 @@ echo -e "\n${BOLD}Testing Load (Apache Bench)${NC}"
 if command -v ab >/dev/null 2>&1; then
     echo "Executing load tests (1000 requests, 100 concurrent)..."
 
-    OUTPUT=$(ab -n 1000 -c 100 -k $BASE_URL/index.html 2>&1)
+    OUTPUT=$(timeout 30 ab -n 1000 -c 100 -k $BASE_URL/index.html 2>&1)
 
-    FAILED_REQ=$(echo "$OUTPUT" | grep "Failed requests:" | awk '{print $3}')
-
-    if [ -z "$FAILED_REQ" ]; then FAILED_REQ=0; fi
-
-    if [ "$FAILED_REQ" -eq 0 ]; then
-        print_pass "Load test passed with 0 failed requests"
+    if [ $? -eq 124 ]; then
+        print_fail "Load test timed out"
     else
-        print_fail "Load test failed with $FAILED_REQ failed requests"
+        FAILED_REQ=$(echo "$OUTPUT" | grep "Failed requests:" | awk '{print $3}')
+
+        if [ -z "$FAILED_REQ" ]; then FAILED_REQ=0; fi
+
+        if [ "$FAILED_REQ" -eq 0 ]; then
+            print_pass "Load test passed with 0 failed requests"
+        else
+            print_fail "Load test failed with $FAILED_REQ failed requests"
+        fi
+
+        # Show requests per second
+        RPS=$(echo "$OUTPUT" | grep "Requests per second:" | awk '{print $4}')
+        echo -e "Performance: ${BOLD}$RPS requests/second${NC}"
     fi
-
-    # Show requests per second
-    RPS=$(echo "$OUTPUT" | grep "Requests per second:" | awk '{print $4}')
-    echo -e "Performance: ${BOLD}$RPS requests/second${NC}"
-
 else 
     echo -e "${RED}Apache Bench (ab) not found. Skipping load tests.${NC}"
 fi
+
+# Verify no dropped connection under load
+echo -e "\n${BOLD}Verifying no dropped connections under load...${NC}"
+
+TOTAL_REQS=10000
+CONCURRENCY=100
+
+if ! command -v ab &> /dev/null; then
+    echo -e "${RED}Error: Apache Bench (ab) could not be found. Skipping dropped connection test.${NC}"
+    exit 1
+fi
+
+echo "Executing load test with $TOTAL_REQS requests and concurrency of $CONCURRENCY..."
+
+OUTPUT=$(timeout 60 ab -n $TOTAL_REQS -c $CONCURRENCY -k $BASE_URL/index.html 2>&1)
+
+FAILED_REQS=$(echo "$OUTPUT" | grep "Failed requests:" | awk '{print $3}')
+if [ -z "$FAILED_REQS" ]; then FAILED_REQS=0; fi
+
+COMPLETE_REQS=$(echo "$OUTPUT" | grep "Complete requests:" | awk '{print $3}')
+if [ -z "$COMPLETE_REQS" ]; then COMPLETE_REQS=0; fi
+
+if [ "$FAILED_REQS" -eq 0 ] && [ "$COMPLETE_REQS" -eq "$TOTAL_REQS" ]; then
+    print_pass "No dropped connections under load"
+else
+    print_fail "Dropped connections detected: $FAILED_REQS failed out of $TOTAL_REQS"
+    echo "Complete requests: $COMPLETE_REQS"
+    echo "Failed requests: $FAILED_REQS"
+
+    echo "$OUTPUT" | grep -E "Failed requests:|Complete requests:" | sed 's/^/    /'
+fi  
+
 
 # Summary
 echo -e "\n${BOLD}Test Summary:${NC}"

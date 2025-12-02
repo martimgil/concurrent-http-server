@@ -4,6 +4,9 @@
 #include <string.h>
 #include <time.h>
 
+// Forward declaration for send_http_response_with_body_flag
+void send_http_response_with_body_flag(int fd, int status, const char* status_msg, const char* content_type, const char* body, size_t body_len, int send_body);
+
 // Function to send an HTTP response
 // Arguments:
 // fd - File descriptor to send the response to
@@ -12,8 +15,14 @@
 // content_type - MIME type of the response body 
 // body - Pointer to the response body
 // body_len - Length of the response body in bytes
+// send_body - If 0 (false), only sends headers (for HEAD requests), otherwise sends both headers and body
 
 void send_http_response(int fd, int status, const char* status_msg, const char* content_type, const char* body, size_t body_len) {
+    send_http_response_with_body_flag(fd, status, status_msg, content_type, body, body_len, 1);
+}
+
+// Internal function that supports body flag for HEAD requests
+void send_http_response_with_body_flag(int fd, int status, const char* status_msg, const char* content_type, const char* body, size_t body_len, int send_body) {
 
     // Validate input parameters
     // Ensure file descriptor is valid and required strings are not NULL
@@ -61,36 +70,49 @@ void send_http_response(int fd, int status, const char* status_msg, const char* 
         return;
     }
 
+    // Send headers with loop to handle partial sends (FAQ Q15)
     // ssize_t -> Signed size type for number of bytes sent
     // send --> Send data over the socket
-    // fd --> File descriptor to send data to
-    // header --> Pointer to the header string
-    // header_len --> Length of the header string
-    // 0 --> Flags parameter (none used here)
-    ssize_t sent = send(fd, header, header_len, 0);
-
-    // Check if sending the header failed
-    if (sent < 0) {
-        perror("Failed to send header");
-        return;
+    ssize_t total_sent = 0;
+    while (total_sent < header_len) {
+        ssize_t sent = send(fd, header + total_sent, header_len - total_sent, 0);
+        
+        if (sent < 0) {
+            perror("Failed to send header");
+            return;
+        }
+        
+        if (sent == 0) {
+            // Connection closed
+            return;
+        }
+        
+        total_sent += sent;
     }
 
-    // Send the response body if provided
+    // Send the response body if provided and if send_body flag is set
     // body --> Pointer to the response body
     // body_len --> Length of the response body in bytes
+    // send_body --> Flag indicating if body should be sent (0 for HEAD requests, 1 for GET)
 
-    if (body && body_len > 0) {
+    if (send_body && body && body_len > 0) {
 
-        // Send the body
-        // sent --> Number of bytes sent
-        // send --> Send data over the socket
-
-        sent = send(fd, body, body_len, 0);
-
-        // Check if sending the body failed
-        if (sent < 0) {
-            perror("Failed to send body");
+        // Send the body with loop to handle partial sends (FAQ Q15)
+        total_sent = 0;
+        while (total_sent < (ssize_t)body_len) {
+            ssize_t sent = send(fd, body + total_sent, body_len - total_sent, 0);
+            
+            if (sent < 0) {
+                perror("Failed to send body");
+                return;
+            }
+            
+            if (sent == 0) {
+                // Connection closed
+                return;
+            }
+            
+            total_sent += sent;
         }
     }
 }
-

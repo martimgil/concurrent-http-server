@@ -28,6 +28,10 @@ int parse_http_request(const char* raw, http_request_t* out_req);
 void send_http_response(int fd, int status, const char* status_msg,
                         const char* content_type, const char* body, size_t body_len);
 
+// send_http_response_with_body_flag -> Version of send_http_response for HEAD requests
+void send_http_response_with_body_flag(int fd, int status, const char* status_msg,
+                        const char* content_type, const char* body, size_t body_len, int send_body);
+
 // ----------------------------------------------------------------------------------------
 // ----------------------------------------------------------------------------------------
 // Helper: Determine MIME type based on file extension for HTTP responses
@@ -71,6 +75,18 @@ static const char* mime_type_from_path(const char* path) {
     return "application/octet-stream";
 }
 
+// Helper: Validate path to prevent directory traversal attacks (path traversal vulnerability)
+// Returns 1 (valid) if path is safe, 0 (invalid) if path contains ".." or other unsafe patterns
+static int is_path_safe(const char* path) {
+    // Check for ".." sequences which could allow directory traversal
+    if (strstr(path, "..") != NULL) {
+        return 0; // Path contains "..", reject it
+    }
+    
+    // Path appears safe
+    return 1;
+}
+
 
 // ###################################################################################################################
 // FEATURE 2 + 4 + 5: HTTP Handler with LRU Cache and Logging
@@ -83,17 +99,32 @@ void handle_client_request(int client_fd, shared_data_t* shm, semaphores_t* sems
     int bytes_sent = 0; // Variable to track bytes sent
     int status_code = 500; // HTTP status code (default: 500)
 
-    // Read HTTP request from client
-    // read -> Reads bytes from client socket into buffer
-    ssize_t n = read(client_fd, buffer, sizeof(buffer)-1);
-
-    // Check for errors or closed connection
-    if (n <= 0){
-        close(client_fd); // Close the client connection
-        return;
+    // Read HTTP request from client (FAQ Q15: Handle partial reads in a loop)
+    // HTTP requests end with \r\n\r\n, so we need to read until we find it or buffer is full
+    ssize_t total_bytes = 0;
+    ssize_t n;
+    
+    // Read until we find the end of HTTP headers (\r\n\r\n) or buffer is full
+    while (total_bytes < (ssize_t)(sizeof(buffer) - 1)) {
+        n = read(client_fd, buffer + total_bytes, sizeof(buffer) - 1 - total_bytes);
+        
+        if (n <= 0) {
+            // Connection closed or error
+            close(client_fd);
+            return;
+        }
+        
+        total_bytes += n;
+        
+        // Check if we have the end of HTTP headers
+        if (total_bytes >= 4 && 
+            buffer[total_bytes-4] == '\r' && buffer[total_bytes-3] == '\n' &&
+            buffer[total_bytes-2] == '\r' && buffer[total_bytes-1] == '\n') {
+            break; // Complete HTTP request received
+        }
     }
 
-    buffer[n] = '\0'; // Null-terminate to operate as string
+    buffer[total_bytes] = '\0'; // Null-terminate to operate as string
 
     // ----------------------------------------------------------------------------------------
     // HTTP REQUEST PARSING (http_parser.c)
@@ -119,9 +150,11 @@ void handle_client_request(int client_fd, shared_data_t* shm, semaphores_t* sems
     }
 
     // ----------------------------------------------------------------------------------------
-    // ONLY GET METHOD IS SUPPORTED AT THIS STAGE
+    // ONLY GET AND HEAD METHODS ARE SUPPORTED
+    // HEAD is treated like GET but without sending the response body
     // ----------------------------------------------------------------------------------------
-    if (strcmp(req.method, "GET") != 0){
+    int is_head_request = (strcmp(req.method, "HEAD") == 0);
+    if (strcmp(req.method, "GET") != 0 && !is_head_request){
         const char* msg = "<h1>405 Method Not Allowed</h1>";
         send_http_response(client_fd, 405, "Method Not Allowed", "text/html", msg, strlen(msg));
         status_code = 405;
@@ -148,6 +181,25 @@ void handle_client_request(int client_fd, shared_data_t* shm, semaphores_t* sems
     // Serve index.html as default for root directory requests
     const char* relpath = (strcmp(req.path, "/") == 0) ? "/index.html" : req.path;
 
+    // ========================================================================================
+    // SECURITY: Path Traversal Validation
+    // ========================================================================================
+    // Validate that the path doesn't contain ".." or other traversal sequences
+    if (!is_path_safe(relpath)) {
+        // Malicious path traversal attempt detected
+        const char* msg = "<h1>403 Forbidden</h1>";
+        send_http_response(client_fd, 403, "Forbidden", "text/html", msg, strlen(msg));
+        status_code = 403;
+        bytes_sent = (int)strlen(msg);
+
+        long end_time = get_time_ms();
+        update_stats(shm, sems, status_code, bytes_sent, end_time - start_time);
+        logger_write("127.0.0.1", req.method, req.path, status_code, (size_t)bytes_sent, end_time - start_time);
+        
+        close(client_fd);
+        return;
+    }
+
     // Construct full absolute path by concatenating document root and relative path
     // This path is used to locate files on the file system
     char abs_path[1024];
@@ -171,8 +223,8 @@ void handle_client_request(int client_fd, shared_data_t* shm, semaphores_t* sems
         // Determine MIME type of resource
         const char* content_type = mime_type_from_path(relpath);
 
-        // Send HTTP response from cached content
-        send_http_response(client_fd, 200, "OK", content_type, (const char*)h.data, h.size);
+        // Send HTTP response from cached content (HEAD request sends only headers)
+        send_http_response_with_body_flag(client_fd, 200, "OK", content_type, (const char*)h.data, h.size, !is_head_request);
 
         status_code = 200; // Update status code
         bytes_sent = (int)h.size; // Update bytes sent
@@ -234,8 +286,8 @@ void handle_client_request(int client_fd, shared_data_t* shm, semaphores_t* sems
         // Determine MIME type based on file extension for correct content-type header
         const char* content_type = mime_type_from_path(relpath);
 
-        // Send successful HTTP response with file content from cache
-        send_http_response(client_fd, 200, "OK", content_type, (const char*)h.data, h.size);
+        // Send successful HTTP response with file content from cache (HEAD request sends only headers)
+        send_http_response_with_body_flag(client_fd, 200, "OK", content_type, (const char*)h.data, h.size, !is_head_request);
 
         status_code = 200; // Update status code to success
         bytes_sent = (int)h.size; // Update bytes sent to file size

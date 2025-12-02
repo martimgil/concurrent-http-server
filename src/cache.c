@@ -403,6 +403,13 @@ static bool read_file_into_memory(const char *abs_path, uint8_t **data, size_t *
         return false;
     }
 
+    // Security: Reject files larger than 1MB to prevent memory exhaustion
+    // Only cache small files as per FAQ requirements
+    #define MAX_CACHE_FILE_SIZE (1024 * 1024) // 1MB
+    if (len > MAX_CACHE_FILE_SIZE) {
+        fclose(f);
+        return false; // File too large for caching
+    }
 
     // Rewind to beginning of file
     if (fseek(f, 0, SEEK_SET) != 0) {
