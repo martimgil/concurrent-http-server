@@ -1,13 +1,19 @@
 #include <stdio.h>
 #include <string.h>
 #include <stddef.h>
-// Structure to hold parsed HTTP request components
-typedef struct {
-    char method[16]; // HTTP method (e.g., GET, POST)
-    char path[512];  // Request path (e.g., /index.html)
-    char version[16]; // HTTP version (e.g., HTTP/1.1)
-} http_request_t; // HTTP request structure
+#include <ctype.h>
+#include "http_parser.h"
 
+// Helper to trim whitespace
+static char* trim_whitespace(char* str) {
+    char* end;
+    while(isspace((unsigned char)*str)) str++;
+    if(*str == 0) return str;
+    end = str + strlen(str) - 1;
+    while(end > str && isspace((unsigned char)*end)) end--;
+    *(end+1) = 0;
+    return str;
+}
 
 // Function to parse an HTTP request from a buffer
 // Arguments:
@@ -21,48 +27,41 @@ int parse_http_request(const char* buffer, http_request_t* req) {
         return -1;
     }
 
-    // Extract the first line of the HTTP request
-    // Find the end of the first line
-    // line_end --> Pointer to the end of the first line
-    // strstr --> Locate the first occurrence of "\r\n" in the buffer
-
-    char* line_end = strstr(buffer, "\r\n");
+    // Initialize the request structure
+    memset(req, 0, sizeof(http_request_t));
     
-    // Check if the first line was found
-    if (!line_end){
+    char* header_end = strstr(buffer, "\r\n\r\n"); // Find the end of headers
+    size_t header_len;
+    if (header_end) {
+        header_len = (size_t)(header_end - buffer);
+    } else {
+        header_len = strlen(buffer);
+    }
+    // Limit header parsing to a reasonable size to prevent stack overflow
+    if (header_len > 8192) header_len = 8192;
+
+    char local_buf[8193]; // Buffer for header parsing
+    strncpy(local_buf, buffer, header_len); // Copy header to local buffer
+    local_buf[header_len] = '\0'; // Null-terminate the buffer
+
+    // Parse Request Line
+    char* line = strtok(local_buf, "\r\n");
+    if (!line) return -1; // Invalid request line
+
+
+    if (sscanf(line, "%15s %511s %15s", req->method, req->path, req->version) != 3) {
         return -1;
     }
 
-    // Copy the first line into a temporary buffer
-    // first_line --> Temporary buffer to hold the first line
-    char first_line[1024];
-
-    // Calculate the length of the first line
-    // len --> Length of the first line
-    // line_end -> Pointer to the end of the first line
-    // buffer -> Pointer to the start of the buffer
-    // line_end - buffer --> Length of the first line
-    size_t len = line_end - buffer;
-
-    // Ensure the length does not exceed the size of first_line
-    if (len >= sizeof(first_line)){ 
-        return -1;
-    }
-
-    // Copy the first line into first_line
-    // strncpy --> Copy the first line into first_line
-    // first_line --> Temporary buffer to hold the first line
-    // buffer --> Pointer to the start of the buffer
-    // len --> Length of the first line
-
-    strncpy(first_line, buffer, len);
-    
-    first_line[len] = '\0'; // Null-terminate the string
-
-    // Use sscanf with width limits to prevent buffer overflows
-    // sscanf --> Read formatted data from the string
-    if (sscanf(first_line, "%15s %511s %15s", req->method, req->path, req->version) != 3) {
-        return -1;
+    // Parse Headers
+    while ((line = strtok(NULL, "\r\n"))) {
+        // Check for Range header
+        // Case-insensitive check for "Range:"
+        if (strncasecmp(line, "Range:", 6) == 0) {
+            char* value = line + 6;
+            value = trim_whitespace(value);
+            strncpy(req->range, value, sizeof(req->range) - 1);
+        }
     }
 
     return 0;

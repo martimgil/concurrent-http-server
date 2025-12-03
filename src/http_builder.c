@@ -3,9 +3,10 @@
 #include <unistd.h>
 #include <string.h>
 #include <time.h>
+#include "http_builder.h"
 
 // Forward declaration for send_http_response_with_body_flag
-void send_http_response_with_body_flag(int fd, int status, const char* status_msg, const char* content_type, const char* body, size_t body_len, int send_body);
+void send_http_response_with_body_flag(int fd, int status, const char* status_msg, const char* content_type, const char* body, size_t body_len, int send_body, int keep_alive);
 
 // Function to send an HTTP response
 // Arguments:
@@ -15,14 +16,14 @@ void send_http_response_with_body_flag(int fd, int status, const char* status_ms
 // content_type - MIME type of the response body 
 // body - Pointer to the response body
 // body_len - Length of the response body in bytes
-// send_body - If 0 (false), only sends headers (for HEAD requests), otherwise sends both headers and body
+// keep_alive - If 1, sends "Connection: keep-alive", otherwise "Connection: close"
 
-void send_http_response(int fd, int status, const char* status_msg, const char* content_type, const char* body, size_t body_len) {
-    send_http_response_with_body_flag(fd, status, status_msg, content_type, body, body_len, 1);
+void send_http_response(int fd, int status, const char* status_msg, const char* content_type, const char* body, size_t body_len, int keep_alive) {
+    send_http_response_with_body_flag(fd, status, status_msg, content_type, body, body_len, 1, keep_alive);
 }
 
 // Internal function that supports body flag for HEAD requests
-void send_http_response_with_body_flag(int fd, int status, const char* status_msg, const char* content_type, const char* body, size_t body_len, int send_body) {
+void send_http_response_with_body_flag(int fd, int status, const char* status_msg, const char* content_type, const char* body, size_t body_len, int send_body, int keep_alive) {
 
     // Validate input parameters
     // Ensure file descriptor is valid and required strings are not NULL
@@ -34,14 +35,16 @@ void send_http_response_with_body_flag(int fd, int status, const char* status_ms
     }
 
     time_t now = time(NULL); // Get the current time
-    struct tm tm = *gmtime(&now); // Convert to GMT time structure
+    struct tm tm; // Time structure for thread-safe gmtime_r
+    gmtime_r(&now, &tm); // Convert to GMT time structure (thread-safe)
     char date_str[64]; // Buffer to hold formatted date string
 
     // Format the date string according to HTTP specifications
     // strftime --> Format date and time
     strftime(date_str, sizeof(date_str), "%a, %d %b %Y %H:%M:%S GMT", &tm);
 
-
+    // Determine Connection header value
+    const char* connection_val = keep_alive ? "keep-alive" : "close";
 
     // Construct HTTP response header
     char header[2048];
@@ -56,9 +59,9 @@ void send_http_response_with_body_flag(int fd, int status, const char* status_ms
     "Content-Length: %zu\r\n" // Content-Length header
     "Server: ConcurrentHTTP/1.0\r\n" // Server header
     "Date: %s\r\n" // Date header
-    "Connection: close\r\n" // Connection header
+    "Connection: %s\r\n" // Connection header
     "\r\n",
-    status, status_msg, content_type, body_len, date_str); // Get current date string
+    status, status_msg, content_type, body_len, date_str, connection_val); // Get current date string
 
 
     // Check for formatting errors
@@ -112,6 +115,58 @@ void send_http_response_with_body_flag(int fd, int status, const char* status_ms
                 return;
             }
             
+            total_sent += sent;
+        }
+    }
+}
+
+// Function to send an HTTP 206 Partial Content response
+void send_http_partial_response(int fd, const char* content_type, const char* body, size_t body_len, 
+                                size_t start, size_t end, size_t total_size, int keep_alive) {
+
+    if (fd < 0 || !content_type) {
+        return;
+    }
+
+    time_t now = time(NULL);
+    struct tm tm;
+    gmtime_r(&now, &tm);
+    char date_str[64];
+    strftime(date_str, sizeof(date_str), "%a, %d %b %Y %H:%M:%S GMT", &tm);
+
+    const char* connection_val = keep_alive ? "keep-alive" : "close";
+
+    char header[2048];
+    int header_len = snprintf(header, sizeof(header),
+    "HTTP/1.1 206 Partial Content\r\n"
+    "Content-Type: %s\r\n"
+    "Content-Length: %zu\r\n"
+    "Content-Range: bytes %zu-%zu/%zu\r\n"
+    "Server: ConcurrentHTTP/1.0\r\n"
+    "Date: %s\r\n"
+    "Connection: %s\r\n"
+    "\r\n",
+    content_type, body_len, start, end, total_size, date_str, connection_val);
+
+    if (header_len < 0 || header_len >= (int)sizeof(header)) {
+        perror("Header formatting failed");
+        return;
+    }
+
+    // Send headers
+    ssize_t total_sent = 0;
+    while (total_sent < header_len) {
+        ssize_t sent = send(fd, header + total_sent, header_len - total_sent, 0);
+        if (sent <= 0) return;
+        total_sent += sent;
+    }
+
+    // Send body
+    if (body && body_len > 0) {
+        total_sent = 0;
+        while (total_sent < (ssize_t)body_len) {
+            ssize_t sent = send(fd, body + total_sent, body_len - total_sent, 0);
+            if (sent <= 0) return;
             total_sent += sent;
         }
     }
