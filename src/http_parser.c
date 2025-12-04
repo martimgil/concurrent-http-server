@@ -45,7 +45,8 @@ int parse_http_request(const char* buffer, http_request_t* req) {
     local_buf[header_len] = '\0'; // Null-terminate the buffer
 
     // Parse Request Line
-    char* line = strtok(local_buf, "\r\n");
+    char* saveptr;
+    char* line = strtok_r(local_buf, "\r\n", &saveptr);
     if (!line) return -1; // Invalid request line
 
 
@@ -54,7 +55,7 @@ int parse_http_request(const char* buffer, http_request_t* req) {
     }
 
     // Parse Headers
-    while ((line = strtok(NULL, "\r\n"))) {
+    while ((line = strtok_r(NULL, "\r\n", &saveptr))) {
         // Check for Range header
         // Case-insensitive check for "Range:"
         if (strncasecmp(line, "Range:", 6) == 0) {

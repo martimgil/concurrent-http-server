@@ -125,185 +125,159 @@ static void send_content(int client_fd, const char* content_type, const char* da
 
 void handle_client_request(int client_fd, shared_data_t* shm, semaphores_t* sems){
     
-    struct timeval tv;
-    tv.tv_sec = 5;  
-    tv.tv_usec = 0;
-    if (setsockopt(client_fd, SOL_SOCKET, SO_RCVTIMEO, (const char*)&tv, sizeof tv) < 0) {
-        perror("setsockopt timeout");
+    long start_time = get_time_ms(); 
+
+    char buffer[8192]; 
+    int bytes_sent = 0; 
+    int status_code = 500; 
+
+    ssize_t total_bytes = 0;
+    ssize_t n;
+    
+    while (total_bytes < (ssize_t)(sizeof(buffer) - 1)) {
+        n = read(client_fd, buffer + total_bytes, sizeof(buffer) - 1 - total_bytes);
+        
+        if (n < 0) {
+            close(client_fd);
+            return;
+        }
+        
+        if (n == 0) {
+            close(client_fd);
+            return;
+        }
+        
+        total_bytes += n;
+        
+        if (total_bytes >= 4 && 
+            buffer[total_bytes-4] == '\r' && buffer[total_bytes-3] == '\n' &&
+            buffer[total_bytes-2] == '\r' && buffer[total_bytes-1] == '\n') {
+            break; 
+        }
+    }
+
+    if (total_bytes == 0) {
         close(client_fd);
         return;
     }
 
-    int keep_alive = 1;     
-    int req_count = 0;      
-    const int MAX_REQS = 100; 
+    buffer[total_bytes] = '\0'; 
 
-    while (keep_alive && req_count < MAX_REQS) {
+    http_request_t req;
+
+    if (parse_http_request(buffer, &req) != 0){
+        const char* msg = "<h1>400 Bad Request</h1>";
+        send_http_response(client_fd, 400, "Bad Request", "text/html", msg, strlen(msg), 0);
+        status_code = 400;
+        bytes_sent = (int)strlen(msg);
+        long end_time = get_time_ms(); 
+        update_stats(shm, sems, status_code, bytes_sent, end_time - start_time); 
+        logger_write("127.0.0.1", "?", "?", status_code, (size_t)bytes_sent, end_time - start_time);
+        close(client_fd);
+        return;
+    }
+
+    int is_head_request = (strcmp(req.method, "HEAD") == 0);
+    if (strcmp(req.method, "GET") != 0 && !is_head_request){
+        const char* msg = "<h1>405 Method Not Allowed</h1>";
+        send_http_response(client_fd, 405, "Method Not Allowed", "text/html", msg, strlen(msg), 0);
+        status_code = 405;
+        bytes_sent = (int)strlen(msg);
+        long end_time = get_time_ms(); 
+        update_stats(shm, sems, status_code, bytes_sent, end_time - start_time); 
+        logger_write("127.0.0.1", req.method, req.path, status_code, (size_t)bytes_sent, end_time - start_time);
+        close(client_fd);
+        return;
+    }
+
+    const char* docroot = worker_get_document_root();
+    const char* relpath = (strcmp(req.path, "/") == 0) ? "/index.html" : req.path;
+
+    if (!is_path_safe(relpath)) {
+        const char* msg = "<h1>403 Forbidden</h1>";
+        send_http_response(client_fd, 403, "Forbidden", "text/html", msg, strlen(msg), 0);
+        status_code = 403;
+        bytes_sent = (int)strlen(msg);
+        long end_time = get_time_ms();
+        update_stats(shm, sems, status_code, bytes_sent, end_time - start_time);
+        logger_write("127.0.0.1", req.method, req.path, status_code, (size_t)bytes_sent, end_time - start_time);
+        close(client_fd);
+        return;
+    }
+
+    char abs_path[1024];
+    snprintf(abs_path, sizeof(abs_path), "%s%s", docroot, relpath);
+
+    file_cache_t* cache = worker_get_cache();
+    cache_handle_t h;
+
+    if (cache_acquire(cache, relpath, &h)){
+        const char* content_type = mime_type_from_path(relpath);
         
-        long start_time = get_time_ms(); 
+        // Use helper to handle range/full content
+        send_content(client_fd, content_type, (const char*)h.data, h.size, &req, 0, is_head_request, &status_code, &bytes_sent);
 
-        char buffer[8192]; 
-        int bytes_sent = 0; 
-        int status_code = 500; 
+        cache_release(cache, &h);
 
-        ssize_t total_bytes = 0;
-        ssize_t n;
-        
-        while (total_bytes < (ssize_t)(sizeof(buffer) - 1)) {
-            n = read(client_fd, buffer + total_bytes, sizeof(buffer) - 1 - total_bytes);
-            
-            if (n < 0) {
-                if (errno == EWOULDBLOCK || errno == EAGAIN) {
-                    keep_alive = 0; 
-                } else {
-                    keep_alive = 0; 
-                }
-                break;
-            }
-            
-            if (n == 0) {
-                keep_alive = 0;
-                break;
-            }
-            
-            total_bytes += n;
-            
-            if (total_bytes >= 4 && 
-                buffer[total_bytes-4] == '\r' && buffer[total_bytes-3] == '\n' &&
-                buffer[total_bytes-2] == '\r' && buffer[total_bytes-1] == '\n') {
-                break; 
-            }
-        }
-
-        if (total_bytes == 0 || !keep_alive) {
-            break;
-        }
-
-        buffer[total_bytes] = '\0'; 
-        req_count++; 
-
-        http_request_t req;
-
-        if (parse_http_request(buffer, &req) != 0){
-            const char* msg = "<h1>400 Bad Request</h1>";
-            send_http_response(client_fd, 400, "Bad Request", "text/html", msg, strlen(msg), 0);
-            status_code = 400;
-            bytes_sent = (int)strlen(msg);
-            long end_time = get_time_ms(); 
-            update_stats(shm, sems, status_code, bytes_sent, end_time - start_time); 
-            logger_write("127.0.0.1", "?", "?", status_code, (size_t)bytes_sent, end_time - start_time);
-            break; 
-        }
-
-        if (strstr(buffer, "Connection: close") != NULL) {
-            keep_alive = 0;
-        }
-
-        int is_head_request = (strcmp(req.method, "HEAD") == 0);
-        if (strcmp(req.method, "GET") != 0 && !is_head_request){
-            const char* msg = "<h1>405 Method Not Allowed</h1>";
-            send_http_response(client_fd, 405, "Method Not Allowed", "text/html", msg, strlen(msg), 0);
-            status_code = 405;
-            bytes_sent = (int)strlen(msg);
-            long end_time = get_time_ms(); 
-            update_stats(shm, sems, status_code, bytes_sent, end_time - start_time); 
-            logger_write("127.0.0.1", req.method, req.path, status_code, (size_t)bytes_sent, end_time - start_time);
-            break; 
-        }
-
-        const char* docroot = worker_get_document_root();
-        const char* relpath = (strcmp(req.path, "/") == 0) ? "/index.html" : req.path;
-
-        if (!is_path_safe(relpath)) {
-            const char* msg = "<h1>403 Forbidden</h1>";
-            send_http_response(client_fd, 403, "Forbidden", "text/html", msg, strlen(msg), 0);
-            status_code = 403;
-            bytes_sent = (int)strlen(msg);
-            long end_time = get_time_ms();
-            update_stats(shm, sems, status_code, bytes_sent, end_time - start_time);
-            logger_write("127.0.0.1", req.method, req.path, status_code, (size_t)bytes_sent, end_time - start_time);
-            break; 
-        }
-
-        char abs_path[1024];
-        snprintf(abs_path, sizeof(abs_path), "%s%s", docroot, relpath);
-
-        file_cache_t* cache = worker_get_cache();
-        cache_handle_t h;
-
-        if (cache_acquire(cache, relpath, &h)){
+        long end_time = get_time_ms(); 
+        update_stats(shm, sems, status_code, bytes_sent, end_time - start_time); 
+        logger_write("127.0.0.1", req.method, req.path, status_code, (size_t)bytes_sent, end_time - start_time);
+    }
+    else if (access(abs_path, F_OK) != 0){
+        const char* msg = "<h1>404 Not Found</h1>";
+        send_http_response(client_fd, 404, "Not Found", "text/html", msg, strlen(msg), 0);
+        status_code = 404;
+        bytes_sent = (int)strlen(msg);
+        long end_time = get_time_ms(); 
+        update_stats(shm, sems, status_code, bytes_sent, end_time - start_time); 
+        logger_write("127.0.0.1", req.method, req.path, status_code, (size_t)bytes_sent, end_time - start_time);
+    }
+    else if (!cache_load_file(cache, relpath, abs_path, &h)){
+        struct stat st;
+        if (stat(abs_path, &st) == 0 && S_ISREG(st.st_mode)) {
+            size_t file_size = st.st_size;
             const char* content_type = mime_type_from_path(relpath);
             
-            // Use helper to handle range/full content
-            send_content(client_fd, content_type, (const char*)h.data, h.size, &req, keep_alive, is_head_request, &status_code, &bytes_sent);
-
-            cache_release(cache, &h);
-
-            long end_time = get_time_ms(); 
-            update_stats(shm, sems, status_code, bytes_sent, end_time - start_time); 
-            logger_write("127.0.0.1", req.method, req.path, status_code, (size_t)bytes_sent, end_time - start_time);
-        }
-        else if (access(abs_path, F_OK) != 0){
-            const char* msg = "<h1>404 Not Found</h1>";
-            send_http_response(client_fd, 404, "Not Found", "text/html", msg, strlen(msg), keep_alive);
-            status_code = 404;
-            bytes_sent = (int)strlen(msg);
-            long end_time = get_time_ms(); 
-            update_stats(shm, sems, status_code, bytes_sent, end_time - start_time); 
-            logger_write("127.0.0.1", req.method, req.path, status_code, (size_t)bytes_sent, end_time - start_time);
-        }
-        else if (!cache_load_file(cache, relpath, abs_path, &h)){
-            struct stat st;
-            if (stat(abs_path, &st) == 0 && S_ISREG(st.st_mode)) {
-                size_t file_size = st.st_size;
-                const char* content_type = mime_type_from_path(relpath);
-                
-                FILE *f = fopen(abs_path, "rb");
-                if (f) {
-                    char *tmp_buf = malloc(file_size);
-                    if (tmp_buf && fread(tmp_buf, 1, file_size, f) == file_size) {
-                        // Use helper to handle range/full content
-                        send_content(client_fd, content_type, tmp_buf, file_size, &req, keep_alive, is_head_request, &status_code, &bytes_sent);
-                    } else {
-                        const char* msg = "<h1>500 Internal Server Error</h1>";
-                        send_http_response(client_fd, 500, "Internal Server Error", "text/html", msg, strlen(msg), 0);
-                        status_code = 500;
-                        keep_alive = 0; 
-                    }
-                    if(tmp_buf) free(tmp_buf);
-                    fclose(f);
+            FILE *f = fopen(abs_path, "rb");
+            if (f) {
+                char *tmp_buf = malloc(file_size);
+                if (tmp_buf && fread(tmp_buf, 1, file_size, f) == file_size) {
+                    // Use helper to handle range/full content
+                    send_content(client_fd, content_type, tmp_buf, file_size, &req, 0, is_head_request, &status_code, &bytes_sent);
                 } else {
                     const char* msg = "<h1>500 Internal Server Error</h1>";
                     send_http_response(client_fd, 500, "Internal Server Error", "text/html", msg, strlen(msg), 0);
                     status_code = 500;
-                    keep_alive = 0;
                 }
+                if(tmp_buf) free(tmp_buf);
+                fclose(f);
             } else {
                 const char* msg = "<h1>500 Internal Server Error</h1>";
                 send_http_response(client_fd, 500, "Internal Server Error", "text/html", msg, strlen(msg), 0);
                 status_code = 500;
-                keep_alive = 0;
             }
-            long end_time = get_time_ms(); 
-            update_stats(shm, sems, status_code, bytes_sent, end_time - start_time); 
-            logger_write("127.0.0.1", req.method, req.path, status_code, (size_t)bytes_sent, end_time - start_time);
+        } else {
+            const char* msg = "<h1>500 Internal Server Error</h1>";
+            send_http_response(client_fd, 500, "Internal Server Error", "text/html", msg, strlen(msg), 0);
+            status_code = 500;
         }
-        else {
-            const char* content_type = mime_type_from_path(relpath);
-            
-            // Use helper to handle range/full content
-            send_content(client_fd, content_type, (const char*)h.data, h.size, &req, keep_alive, is_head_request, &status_code, &bytes_sent);
+        long end_time = get_time_ms(); 
+        update_stats(shm, sems, status_code, bytes_sent, end_time - start_time); 
+        logger_write("127.0.0.1", req.method, req.path, status_code, (size_t)bytes_sent, end_time - start_time);
+    }
+    else {
+        const char* content_type = mime_type_from_path(relpath);
+        
+        // Use helper to handle range/full content
+        send_content(client_fd, content_type, (const char*)h.data, h.size, &req, 0, is_head_request, &status_code, &bytes_sent);
 
-            cache_release(cache, &h);
+        cache_release(cache, &h);
 
-            long end_time = get_time_ms(); 
-            update_stats(shm, sems, status_code, bytes_sent, end_time - start_time); 
-            logger_write("127.0.0.1", req.method, req.path, status_code, (size_t)bytes_sent, end_time - start_time);
-        }
+        long end_time = get_time_ms(); 
+        update_stats(shm, sems, status_code, bytes_sent, end_time - start_time); 
+        logger_write("127.0.0.1", req.method, req.path, status_code, (size_t)bytes_sent, end_time - start_time);
+    }
 
-    } // End of Keep-Alive Loop
-
-    // Close the client socket connection (finally, when keep_alive=0 or timeout)
     close(client_fd); 
 }
 
@@ -316,7 +290,7 @@ void handle_client_request(int client_fd, shared_data_t* shm, semaphores_t* sems
 // sems - Pointer to semaphores for synchronization
 // Returns: Pointer to newly created thread pool, or NULL on failure
 
-thread_pool_t* create_thread_pool(int num_threads, shared_data_t* shm, semaphores_t* sems) {
+thread_pool_t* create_thread_pool(int num_threads, int max_queue_size, shared_data_t* shm, semaphores_t* sems) {
 
     // Allocate memory for the thread pool structure
     thread_pool_t* pool = malloc(sizeof(thread_pool_t));
@@ -337,6 +311,7 @@ thread_pool_t* create_thread_pool(int num_threads, shared_data_t* shm, semaphore
     pool->head = NULL;                      // Initialize job queue head (empty)
     pool->tail = NULL;                      // Initialize job queue tail (empty)
     pool->job_count = 0;                    // Initialize job counter (no jobs)
+    pool->max_queue_size = max_queue_size;  // Store maximum queue size
 
     // Initialize the mutex for protecting shared pool state
     // The mutex ensures only one thread can access pool->job_count, head, tail at a time

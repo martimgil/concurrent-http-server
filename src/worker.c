@@ -239,10 +239,11 @@ void worker_main(shared_data_t* shm, semaphores_t* sems, int worker_id, int chan
     signal(SIGTERM, worker_signal_handler);
     signal(SIGINT, worker_signal_handler);
 
-    // Create a thread pool with 10 threads
+    // Create a thread pool with 10 threads and a bounded queue of 2000 jobs
     // Note: the thread pool will typically call the logic that serves requests (HTTP) and,
     //       in that logic, should use the cache via worker_get_cache() and DOCROOT via worker_get_document_root().
-    thread_pool_t* pool = create_thread_pool(10, shm, sems);
+    // Max queue size of 2000 prevents memory exhaustion while handling extreme load
+    thread_pool_t* pool = create_thread_pool(10, 2000, shm, sems);
 
     printf("Worker %d: Starting main loop.\n", worker_id);
     fflush(stdout);

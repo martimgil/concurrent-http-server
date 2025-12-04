@@ -26,12 +26,13 @@ typedef struct {
     job_t* head; // Pointer to the head of the job queue
     job_t* tail; // Pointer to the tail of the job queue
     int job_count; // Number of jobs in the queue
+    int max_queue_size; // Maximum number of jobs allowed in the queue
 
     shared_data_t* shm; // Pointer to shared memory for statistics
     semaphores_t* sems; // Pointer to semaphores for synchronization
 } thread_pool_t;
 
-thread_pool_t* create_thread_pool(int num_threads, shared_data_t* shm, semaphores_t* sems); // Create a new thread pool
+thread_pool_t* create_thread_pool(int num_threads, int max_queue_size, shared_data_t* shm, semaphores_t* sems); // Create a new thread pool
 
 void destroy_thread_pool(thread_pool_t* pool); // Destroy the thread pool   
 void thread_pool_submit(thread_pool_t* pool, int client_fd); // Submit a job to the thread pool

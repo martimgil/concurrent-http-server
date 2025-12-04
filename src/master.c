@@ -23,7 +23,9 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <unistd.h>
+#include <unistd.h>
 #include <fcntl.h>
+#include <semaphore.h>
 
 #include "config.h"       // server_config_t, load_config()
 #include "shared_mem.h"   // create_shared_memory(), destroy_shared_memory()
@@ -37,6 +39,7 @@
 // ###################################################################################################################
 
 static volatile int master_running = 1; // Control variable for main loop
+static volatile sig_atomic_t should_print_stats = 0; // Flag for printing stats
 
 static shared_data_t* g_shm = NULL; // Global shared memory pointer
 static semaphores_t* g_sems = NULL; // Global semaphores pointer
@@ -44,17 +47,25 @@ static semaphores_t* g_sems = NULL; // Global semaphores pointer
 
 void stats_timer_handler(int signum){
     (void)signum;
-
-    if(g_shm && g_sems){
-        print_stats(g_shm, g_sems); // 1 second interval
-    }
-
-    alarm(30);; // Re-arm the alarm for next 30 seconds
+    int saved_errno = errno;
+    should_print_stats = 1;
+    alarm(30); // Re-arm the alarm for next 30 seconds
+    errno = saved_errno;
 }
+
 // Signal handler for graceful shutdown of the master process
 static void master_signal_handler(int signum) {
     fprintf(stderr, "MASTER: Received signal %d, shutting down\n", signum);
     master_running = 0;
+}
+
+// Signal handler for SIGCHLD to reap zombie worker processes
+static void sigchld_handler(int signum) {
+    (void)signum;
+    int saved_errno = errno;
+    // Reap all terminated child processes without blocking
+    while (waitpid(-1, NULL, WNOHANG) > 0);
+    errno = saved_errno;
 }
 
 // ###################################################################################################################
@@ -112,7 +123,8 @@ static int create_listen_socket(int port) {
 
     // listen with a reasonable backlog
     // listen -> Mark socket as passive (listening)
-    if (listen(s, 1024) < 0) { // Check for errors
+    // Backlog of 512 handles connection bursts while staying within queue capacity
+    if (listen(s, 512) < 0) { // Check for errors
         perror("listen");
         close(s);
         return -1;
@@ -309,13 +321,16 @@ int main(int argc, char* argv[]) {
     }
 
     // ADDED: initialize the global logger (Feature 5)
+    sem_unlink("/ws_log_sem"); // Ensure fresh semaphore
     logger_init(config.log_file); // Initialize logger
 
     // ---------------------------------------------------------------------------------------------------------------
-    // 2) Signal handlers (CTRL+C, kill)
+    // 2) Signal handlers (CTRL+C, kill, SIGCHLD for zombies, SIGPIPE for broken pipes)
     // ---------------------------------------------------------------------------------------------------------------
     signal(SIGINT,  master_signal_handler); // Handle CTRL+C
     signal(SIGTERM, master_signal_handler); // Handle termination signal
+    signal(SIGCHLD, sigchld_handler);       // Handle child process termination (reap zombies)
+    signal(SIGPIPE, SIG_IGN);               // Ignore broken pipe signals
 
     // ---------------------------------------------------------------------------------------------------------------
     // 3) Shared memory and semaphores
@@ -451,7 +466,16 @@ int main(int argc, char* argv[]) {
 
         // Check for errors
         if (client_fd < 0) {
-            if (errno == EINTR && !master_running) break; // interrupted by signal
+            if (errno == EINTR) {
+                if (!master_running) break; // interrupted by SIGINT/SIGTERM
+                if (should_print_stats) {
+                    if(g_shm && g_sems) {
+                        print_stats(g_shm, g_sems);
+                    }
+                    should_print_stats = 0;
+                }
+                continue; // interrupted by SIGALRM or other
+            }
             perror("accept");
             continue;
         }
