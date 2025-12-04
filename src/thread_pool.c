@@ -252,9 +252,20 @@ void handle_client_request(int client_fd, shared_data_t* shm, semaphores_t* sems
                 if(tmp_buf) free(tmp_buf);
                 fclose(f);
             } else {
-                const char* msg = "<h1>500 Internal Server Error</h1>";
-                send_http_response(client_fd, 500, "Internal Server Error", "text/html", msg, strlen(msg), 0);
-                status_code = 500;
+                // Check errno to determine the type of error
+                if (errno == EACCES) {
+                    // Permission denied - return 403 Forbidden
+                    const char* msg = "<h1>403 Forbidden</h1>";
+                    send_http_response(client_fd, 403, "Forbidden", "text/html", msg, strlen(msg), 0);
+                    status_code = 403;
+                    bytes_sent = (int)strlen(msg);
+                } else {
+                    // Other errors (e.g., memory allocation failure) - return 500
+                    const char* msg = "<h1>500 Internal Server Error</h1>";
+                    send_http_response(client_fd, 500, "Internal Server Error", "text/html", msg, strlen(msg), 0);
+                    status_code = 500;
+                    bytes_sent = (int)strlen(msg);
+                }
             }
         } else {
             const char* msg = "<h1>500 Internal Server Error</h1>";

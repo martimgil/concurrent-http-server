@@ -1,0 +1,193 @@
+\documentclass[a4paper,12pt]{article}
+%  -- Esssa estrutura foi feita em AI para servir de base ao manual de utilizador do projeto de servidor web. 
+% --- Pacotes Fundamentais ---
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[portuguese]{babel}
+\usepackage{geometry}
+\usepackage{graphicx}
+\usepackage{hyperref}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{float}
+
+% --- Configuração da Página ---
+\geometry{
+    a4paper,
+    left=2.5cm,
+    right=2.5cm,
+    top=2.5cm,
+    bottom=2.5cm
+}
+
+% --- Estilo para Código (Terminal/Config) ---
+\definecolor{codegray}{rgb}{0.95,0.95,0.95}
+\definecolor{codeblack}{rgb}{0,0,0}
+
+\lstset{
+    backgroundcolor=\color{codegray},
+    basicstyle=\ttfamily\small\color{codeblack},
+    breaklines=true,
+    frame=single,
+    numbers=none,
+    showstringspaces=false,
+    tabsize=2,
+    captionpos=b
+}
+
+% --- Metadados do Documento ---
+\title{
+    \textbf{[NOME DO PROJETO - SERVIDOR WEB]}\\
+    \large Manual de Utilizador
+}
+\author{
+    [Nome do Aluno 1] \\ NMec: [11111]
+    \and
+    [Nome do Aluno 2] \\ NMec: [22222]
+}
+\date{\today}
+
+\begin{document}
+
+% --- Capa e Índice ---
+\maketitle
+\thispagestyle{empty} % Remove número da página na capa
+\newpage
+
+\tableofcontents
+\newpage
+
+% =================================================================
+% 1. INTRODUÇÃO
+% =================================================================
+\section{Introdução}
+% [INSTRUÇÃO: Breve parágrafo a explicar o que este software faz.]
+[Inserir descrição geral do servidor: suporte a HTTP/1.1, arquitetura multi-thread, objetivos principais.]
+
+% =================================================================
+% 2. REQUISITOS DO SISTEMA
+% =================================================================
+\section{Requisitos do Sistema}
+% [INSTRUÇÃO: O que é preciso para correr isto?]
+
+Para a correta execução do servidor, o ambiente deve cumprir os seguintes requisitos:
+\begin{itemize}
+    \item \textbf{Sistema Operativo:} [Inserir SO, ex: Linux Ubuntu 20.04+]
+    \item \textbf{Compilador:} [Inserir versão do GCC necessária]
+    \item \textbf{Bibliotecas:} [Listar bibliotecas, ex: pthread, rt]
+    \item \textbf{Ferramentas:} [Listar ferramentas, ex: Make, curl, ab]
+\end{itemize}
+
+% =================================================================
+% 3. COMPILAÇÃO
+% =================================================================
+\section{Compilação}
+% [INSTRUÇÃO: Explicar os comandos do Makefile.]
+
+O projeto utiliza um \texttt{Makefile} para automação. Utilize os seguintes comandos na raiz do projeto:
+
+\subsection{Compilação Normal}
+% [INSTRUÇÃO: Comando para gerar o executável final]
+\begin{lstlisting}[language=bash]
+[Inserir comando, ex: make all]
+\end{lstlisting}
+Este comando gera o executável em \texttt{[caminho/do/executavel]}.
+
+\subsection{Limpeza}
+% [INSTRUÇÃO: Comando para apagar ficheiros .o e binários]
+\begin{lstlisting}[language=bash]
+[Inserir comando, ex: make clean]
+\end{lstlisting}
+
+\subsection{Modos de Debug (Opcional)}
+% [INSTRUÇÃO: Se tiveres modos extra como helgrind ou sanitizers]
+\begin{itemize}
+    \item \textbf{[Nome Modo 1]:} \texttt{[make target]} - [Breve descrição]
+    \item \textbf{[Nome Modo 2]:} \texttt{[make target]} - [Breve descrição]
+\end{itemize}
+
+% =================================================================
+% 4. CONFIGURAÇÃO
+% =================================================================
+\section{Configuração}
+% [INSTRUÇÃO: Explicar o ficheiro server.conf]
+
+O servidor é configurado através do ficheiro \texttt{[nome\_ficheiro.conf]}. Abaixo descrevem-se os parâmetros aceites:
+
+\begin{table}[H]
+\centering
+\begin{tabular}{|l|l|p{7cm}|}
+\hline
+\textbf{Parâmetro} & \textbf{Valor Exemplo} & \textbf{Descrição} \\ \hline
+[NOME\_PARAM\_1]   & [Valor]                & [O que este parâmetro controla] \\ \hline
+[NOME\_PARAM\_2]   & [Valor]                & [O que este parâmetro controla] \\ \hline
+[NOME\_PARAM\_3]   & [Valor]                & [O que este parâmetro controla] \\ \hline
+[NOME\_PARAM\_4]   & [Valor]                & [O que este parâmetro controla] \\ \hline
+\end{tabular}
+\caption{Parâmetros de configuração}
+\end{table}
+
+% =================================================================
+% 5. EXECUÇÃO
+% =================================================================
+\section{Execução}
+
+\subsection{Iniciar o Servidor}
+% [INSTRUÇÃO: Como arrancar o programa]
+Para iniciar o servidor, execute o seguinte comando:
+\begin{lstlisting}[language=bash]
+[Inserir comando de execução]
+\end{lstlisting}
+
+Output esperado ao iniciar:
+\begin{lstlisting}
+[Inserir exemplo do texto que aparece no terminal quando o servidor arranca]
+\end{lstlisting}
+
+\subsection{Parar o Servidor (Graceful Shutdown)}
+% [INSTRUÇÃO: Explicar como parar (Ctrl+C ou SIGINT) e o que acontece]
+Para encerrar o servidor corretamente:
+\begin{enumerate}
+    \item [Passo 1: ex: Pressionar Ctrl+C]
+    \item [O que o servidor faz: liberta recursos, fecha sockets, etc.]
+\end{enumerate}
+
+% =================================================================
+% 6. EXEMPLOS DE UTILIZAÇÃO
+% =================================================================
+\section{Exemplos de Utilização}
+% [INSTRUÇÃO: Demonstração de que funciona]
+
+\subsection{Pedido Simples (Browser/Curl)}
+\begin{lstlisting}[language=bash]
+[Inserir comando curl exemplo]
+\end{lstlisting}
+
+\subsection{Verificação de Erros (404)}
+\begin{lstlisting}[language=bash]
+[Inserir comando que gera um erro propositado]
+\end{lstlisting}
+
+\subsection{Consultar Estatísticas/Logs}
+% [INSTRUÇÃO: Onde ver os logs ou stats]
+As estatísticas ou logs podem ser visualizados em:
+\begin{itemize}
+    \item [Localização 1]
+    \item [Localização 2]
+\end{itemize}
+
+% =================================================================
+% 7. RESOLUÇÃO DE PROBLEMAS
+% =================================================================
+\section{Resolução de Problemas}
+% [INSTRUÇÃO: Erros comuns que o professor possa encontrar]
+
+\begin{itemize}
+    \item \textbf{Erro:} [Nome do Erro, ex: Bind failed]
+    \\ \textbf{Solução:} [Como resolver, ex: Mudar a porta no config]
+    
+    \item \textbf{Erro:} [Outro Erro]
+    \\ \textbf{Solução:} [Outra Solução]
+\end{itemize}
+
+\end{document}

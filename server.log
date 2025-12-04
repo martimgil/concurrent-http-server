@@ -1,0 +1,9 @@
+MASTER: Config loaded from server.conf
+Worker: Cache initialized with 2621440 bytes. DOCROOT=./www
+Worker: Cache initialized with 2621440 bytes. DOCROOT=./www
+Worker: Cache initialized with 2621440 bytes. DOCROOT=./www
+Worker: Cache initialized with 2621440 bytes. DOCROOT=./www
+Worker 1: Starting main loop.
+Worker 2: Starting main loop.
+Worker 0: Starting main loop.
+Worker 3: Starting main loop.

@@ -68,6 +68,11 @@ run: $(TARGET)
 debug: CFLAGS += -DDEBUG -g3
 debug: clean all
 
+# Thread Sanitizer build
+tsan: CFLAGS += -fsanitize=thread -g -O1
+tsan: LDFLAGS += -fsanitize=thread
+tsan: clean all
+
 # Install dependencies (if needed)
 install-deps:
 	@echo "No external dependencies required."
