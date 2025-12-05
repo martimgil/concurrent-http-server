@@ -1,0 +1,168 @@
+\documentclass[a4paper,12pt]{article}
+
+% --- Packages ---
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[english]{babel} % Changed to English
+\usepackage{graphicx}
+\usepackage{geometry}
+\usepackage{hyperref}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{float}
+\usepackage{booktabs} % For nicer tables
+\usepackage{pgfplots} % Optional: For graphs directly in LaTeX
+
+% --- Page Configuration ---
+\geometry{margin=2.5cm}
+
+% --- Code Configuration ---
+\definecolor{codegray}{rgb}{0.95,0.95,0.95}
+\lstset{
+    backgroundcolor=\color{codegray},
+    basicstyle=\ttfamily\small,
+    breaklines=true,
+    frame=single,
+    numbers=left,
+    language=C
+}
+
+% --- Metadata ---
+\title{
+    \textbf{Technical Report}\\
+    \large Multi-Threaded Web Server with IPC and Semaphores
+}
+\author{
+    [Student Name 1] (ID: [XXXXX]) \\
+    [Student Name 2] (ID: [YYYYY]) \\
+    \textit{Operating Systems - University of Aveiro}
+}
+\date{\today}
+
+\begin{document}
+
+\maketitle
+\abstract{
+    This report describes the implementation of a concurrent web server in C, utilizing a multi-process and multi-thread architecture. The system implements complex synchronization mechanisms (POSIX semaphores, mutexes, condition variables) and inter-process communication via shared memory. Technical details of each module, major concurrency challenges faced, and a quantitative performance analysis under load are presented.
+}
+
+\tableofcontents
+\newpage
+
+% ----------------------------------------------------------------------
+% 1. Introduction
+% ----------------------------------------------------------------------
+\section{Introduction}
+% Brief context of the project.
+% Objectives: Create a robust and concurrent HTTP/1.1 server.
+% Summary of chosen approach (Master-Worker).
+
+% ----------------------------------------------------------------------
+% 2. Implementation Details
+% ----------------------------------------------------------------------
+\section{Implementation Details}
+% Describe "HOW" you built it. Base this on src/*.c files.
+
+\subsection{System Architecture}
+% Detailed description of startup (forks) and shared memory structure.
+% Reference: src/master.c, src/shared_mem.c
+
+\subsection{Process and Thread Management}
+% Explain Worker and Thread Pool logic.
+% How threads are created and wait for work (Condition Variables).
+% Reference: src/worker.c, src/thread_pool.c
+
+\subsection{Synchronization and IPC}
+% Detail semaphore implementation.
+% - Circular Buffer Access (Producer-Consumer).
+% - Statistics Protection (Atomicity).
+% - Shared Log (File Mutual Exclusion).
+% Reference: src/semaphores.c
+
+\subsection{Resource Management (Cache and Files)}
+% Explain LRU Cache algorithm.
+% Use of Reader-Writer Locks (pthread_rwlock) for performance.
+% Reference: src/cache.c
+
+\subsection{HTTP Processing}
+% Request parsing and response construction.
+% Error handling (404, 403, 500).
+% Reference: src/http_parser.c, src/http_builder.c
+
+% ----------------------------------------------------------------------
+% 3. Challenges and Solutions
+% ----------------------------------------------------------------------
+\section{Challenges and Solutions}
+% Critical section to show understanding of concurrency issues.
+
+\subsection{Race Conditions}
+% Example: "We detected statistics were losing counts..."
+% Solution: "Implemented an exclusive semaphore for the stats struct."
+
+\subsection{Memory Management and Leaks}
+% Discussion on Valgrind usage.
+% Ensuring shared memory is cleaned (unlink) on shutdown (SIGINT).
+
+\subsection{Log Synchronization}
+% The problem of interleaved log lines.
+% Implemented solution (local buffer or mutex).
+
+\subsection{Zombies and Signals}
+% How SIGCHLD or waitpid was handled in Master to prevent zombies.
+
+% ----------------------------------------------------------------------
+% 4. Testing Methodology
+% ----------------------------------------------------------------------
+\section{Testing Methodology}
+% Describe how the server was validated.
+% Mention 'test_suite.sh' and 'test_concurrent.c'.
+
+\subsection{Functional Tests}
+% curl, mime-type validation, status codes.
+
+\subsection{Concurrency and Stress Tests}
+% Usage of Apache Bench (ab).
+% Validation with Helgrind/ThreadSanitizer (TSan).
+
+% ----------------------------------------------------------------------
+% 5. Performance Analysis
+% ----------------------------------------------------------------------
+\section{Performance Analysis}
+% MANDATORY: Graphs and Tables.
+% The project requirements ask for "performance analysis".
+
+\subsection{Test Environment}
+% Hardware used (CPU, RAM), OS.
+% Server configuration (N Workers, M Threads).
+
+\subsection{Results: Throughput}
+% Graph: Requests per Second vs Number of Concurrent Clients.
+% Ex: Test with 10, 50, 100, 500 clients.
+
+\begin{table}[H]
+\centering
+\begin{tabular}{|c|c|c|}
+\hline
+\textbf{Concurrency} & \textbf{Req/s (No Cache)} & \textbf{Req/s (With Cache)} \\ \hline
+10  & 1500 & 4000 \\ \hline
+100 & 2000 & 8500 \\ \hline
+\end{tabular}
+\caption{Throughput comparison with and without cache}
+\end{table}
+
+\subsection{Results: Latency}
+% Average response time.
+
+\subsection{Discussion of Results}
+% Interpretation: "Cache improved performance by 300%..."
+% "The main bottleneck appears to be log writing..."
+
+% ----------------------------------------------------------------------
+% 6. Conclusion
+% ----------------------------------------------------------------------
+\section{Conclusion}
+% Summary of work.
+% Does the server meet all requirements?
+% Future Work (e.g., Keep-Alive, SSL).
+
+\end{document}

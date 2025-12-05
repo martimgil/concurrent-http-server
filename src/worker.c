@@ -6,6 +6,7 @@
 #include <sys/un.h>
 #include <errno.h>
 #include <string.h>
+#include <time.h>
 
 #include "worker.h"
 #include "shared_mem.h"
@@ -84,7 +85,8 @@ static char g_docroot[256];
  * Signal handler to gracefully stop the worker process.
  */
 void worker_signal_handler(int signum) {
-    (void)signum;
+    fprintf(stderr, "Worker: Received signal %d, shutting down\n", signum);
+    fflush(stderr);
     worker_running = 0;
 }
 
@@ -164,9 +166,39 @@ void worker_shutdown_resources(void) {
 static connection_item_t dequeue_connection(shared_data_t* shm, semaphores_t* sems) {
     connection_item_t item = {-1, -1};
 
-    // Wait for an available item
-    if (sem_wait(sems->filled_slots) != 0) {
-        perror("sem_wait(filled_slots)");
+    // Wait for an available item with timeout to allow periodic shutdown checks
+    struct timespec ts;
+    while (1) {
+        // Set timeout to 1 second from now
+        clock_gettime(CLOCK_REALTIME, &ts);
+        ts.tv_sec += 1;
+
+        int ret = sem_timedwait(sems->filled_slots, &ts);
+        if (ret == 0) {
+            // Successfully acquired semaphore
+            break;
+        }
+
+        if (errno == ETIMEDOUT) {
+            // Timeout - check if we should shutdown
+            if (!worker_running) {
+                return item; // Return error to signal shutdown
+            }
+            // Otherwise, retry
+            continue;
+        }
+
+        if (errno == EINTR) {
+            // Interrupted by signal - check if we should shutdown
+            if (!worker_running) {
+                return item; // Return error to signal shutdown
+            }
+            // Otherwise, retry
+            continue;
+        }
+
+        // Other error
+        perror("sem_timedwait(filled_slots)");
         return item;
     }
 
@@ -267,6 +299,8 @@ void worker_main(shared_data_t* shm, semaphores_t* sems, int worker_id, int chan
             continue;
         }
 
+        // Check if we should shutdown before trying to receive FD
+        if (!worker_running) break;
 
         // This connection is for this worker, now receive the FD via UNIX socket
         int client_fd = recv_fd(channel_fd);

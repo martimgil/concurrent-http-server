@@ -511,13 +511,19 @@ int main(int argc, char* argv[]) {
     // Close listen socket
     close(listen_fd);
 
+    // Wake up all workers that might be blocked on sem_wait(filled_slots)
+    // by posting dummy items to the semaphore
+    for (int i = 0; i < num_workers; ++i) {
+        sem_post(sems->filled_slots);
+    }
+
     // Close channels and signal workers
     for (int i = 0; i < num_workers; ++i) {
         close(parent_end[i]);
         if (pids[i] > 0) kill(pids[i], SIGTERM);
     }
 
-    // Wait for workers to terminate
+    // Wait for workers to terminate (with timeout)
     for (int i = 0; i < num_workers; ++i) {
         if (pids[i] > 0) {
             int status = 0;

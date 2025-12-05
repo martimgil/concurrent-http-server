@@ -1,0 +1,150 @@
+\documentclass[a4paper,12pt]{article}
+
+% --- Essential Packages ---
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[english]{babel}
+\usepackage{geometry}
+\usepackage{graphicx}
+\usepackage{hyperref}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{float}
+
+% --- Configuration ---
+\geometry{margin=2.5cm}
+\definecolor{codegray}{rgb}{0.95,0.95,0.95}
+\lstset{
+    backgroundcolor=\color{codegray},
+    basicstyle=\ttfamily\small,
+    breaklines=true,
+    frame=single,
+    numbers=left,
+    language=C
+}
+
+% --- Metadata ---
+\title{
+    \textbf{Design Document}\\
+    \large Multi-Threaded Web Server with IPC
+}
+\author{
+    [Student Name 1] (ID: [XXXXX]) \\
+    [Student Name 2] (ID: [YYYYY]) \\
+    \textit{Operating Systems - University of Aveiro}
+}
+\date{\today}
+
+\begin{document}
+
+\maketitle
+\tableofcontents
+\newpage
+
+% ----------------------------------------------------------------------
+% 1. ARCHITECTURE OVERVIEW
+% ----------------------------------------------------------------------
+\section{Architecture Overview}
+% [Instruction: Describe the Master-Worker model]
+The system follows a multi-process, multi-threaded architecture designed to handle high concurrency.
+
+\subsection{Process Model}
+The application consists of a single **Master Process** and $N$ **Worker Processes**:
+\begin{itemize}
+    \item \textbf{Master:} Responsible for socket binding, accepting connections, and distributing them via a shared queue.
+    \item \textbf{Workers:} Responsible for consuming requests from the queue and processing them using a thread pool.
+\end{itemize}
+
+\begin{figure}[H]
+    \centering
+    % \includegraphics[width=0.8\textwidth]{architecture_diagram.png}
+    \caption{High-Level Architecture Diagram}
+    \label{fig:arch}
+\end{figure}
+
+% ----------------------------------------------------------------------
+% 2. SHARED DATA STRUCTURES
+% ----------------------------------------------------------------------
+\section{Shared Data Structures}
+Inter-Process Communication (IPC) is achieved through POSIX Shared Memory.
+
+\subsection{Memory Layout}
+The main shared structure \texttt{shared\_data\_t} contains:
+\begin{lstlisting}
+typedef struct {
+    request_queue_t queue;   // Circular buffer for socket FDs
+    server_stats_t stats;    // Global statistics counters
+    // ...
+} shared_data_t;
+\end{lstlisting}
+
+\subsection{Circular Buffer (Producer-Consumer)}
+The request queue is implemented as a bounded circular buffer (FIFO) located in shared memory. It uses \texttt{in} and \texttt{out} indices to manage insertions and removals.
+
+% ----------------------------------------------------------------------
+% 3. SYNCHRONIZATION MECHANISMS
+% ----------------------------------------------------------------------
+\section{Synchronization Mechanisms}
+% [Instruction: Explain HOW you prevent race conditions]
+
+\subsection{Process Synchronization (Semaphores)}
+We use named POSIX semaphores to coordinate the Master and Workers:
+\begin{itemize}
+    \item \texttt{SEM\_MUTEX}: Ensures mutual exclusion when accessing the shared queue indices.
+    \item \texttt{SEM\_ITEMS}: Counts the number of pending requests (Signals Workers).
+    \item \texttt{SEM\_SPACES}: Counts the available slots in the queue (Signals Master).
+\end{itemize}
+
+\subsection{Thread Synchronization (Mutex \& Cond Vars)}
+Inside each Worker process, a Thread Pool handles requests. Synchronization is achieved via:
+\begin{itemize}
+    \item \texttt{pthread\_mutex\_t}: Protects the internal worker queue/state.
+    \item \texttt{pthread\_cond\_t}: Allows threads to sleep until new work arrives.
+\end{itemize}
+
+% ----------------------------------------------------------------------
+% 4. COMPONENT DESIGN
+% ----------------------------------------------------------------------
+\section{Component Design}
+
+\subsection{LRU Cache}
+Each worker maintains a local Least Recently Used (LRU) cache for static files.
+\begin{itemize}
+    \item \textbf{Structure:} Hash map for O(1) lookups + Doubly Linked List for eviction.
+    \item \textbf{Concurrency:} Protected by \texttt{pthread\_rwlock} to allow multiple simultaneous readers.
+\end{itemize}
+
+\subsection{Thread-Safe Logging}
+A single log file is shared. Writes are serialized using a specific semaphore/mutex to prevent interleaved lines.
+
+% ----------------------------------------------------------------------
+% 5. SYSTEM LIFECYCLE
+% ----------------------------------------------------------------------
+\section{System Lifecycle}
+
+\subsection{Initialization}
+1. Load configuration.
+2. Create/Open Shared Memory and Semaphores.
+3. Bind and Listen on TCP Port.
+4. Fork Worker processes.
+
+\subsection{Shutdown (Graceful Exit)}
+Upon receiving \texttt{SIGINT}:
+1. Master stops accepting connections.
+2. Signals all workers to terminate.
+3. Workers join all threads and exit.
+4. Master unlinks shared memory and semaphores before exiting.
+
+% ----------------------------------------------------------------------
+% 6. DIAGRAMS
+% ----------------------------------------------------------------------
+\section{Flowcharts}
+% [Instruction: Add required flowcharts here]
+
+\begin{figure}[H]
+    \centering
+    % \includegraphics[width=0.7\textwidth]{request_flow.png}
+    \caption{Request Processing Flowchart}
+\end{figure}
+
+\end{document}

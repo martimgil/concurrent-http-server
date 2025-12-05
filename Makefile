@@ -31,8 +31,8 @@ SOURCES = $(SRC_DIR)/master.c \
 OBJECTS = $(SOURCES:$(SRC_DIR)/%.c=$(BUILD_DIR)/%.o)
 DEPS    = $(OBJECTS:.o=.d)
 
-# Default target
-all: directories $(TARGET)
+# Default target - includes webserver and stats_reader utility
+all: directories $(TARGET) $(BIN_DIR)/stats_reader
 
 # Create necessary directories
 directories:
@@ -44,6 +44,12 @@ $(TARGET): $(OBJECTS)
 	@echo "Linking $@..."
 	$(CC) $(OBJECTS) $(LDFLAGS) -o $@
 	@echo "Build complete: $@"
+
+# Build stats reader utility
+$(BIN_DIR)/stats_reader: $(SRC_DIR)/stats_reader.c $(BUILD_DIR)/shared_mem.o
+	@echo "Building stats reader utility..."
+	$(CC) $(CFLAGS) $(SRC_DIR)/stats_reader.c $(BUILD_DIR)/shared_mem.o $(LDFLAGS) -o $@
+	@echo "Stats reader built: $@"
 
 # Compile source files to object files (deps auto-geradas por -MMD -MP)
 $(BUILD_DIR)/%.o: $(SRC_DIR)/%.c
