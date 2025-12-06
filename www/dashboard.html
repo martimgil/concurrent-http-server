@@ -1,446 +1,251 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="dark">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Server Dashboard - Real-time Statistics</title>
+    <title>Server Dashboard</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Chart.js -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-        
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
-            min-height: 100vh;
-            color: #e4e4e4;
-            padding: 20px;
-        }
-        
-        .header {
-            text-align: center;
-            margin-bottom: 30px;
-        }
-        
-        .header h1 {
-            font-size: 2.5rem;
-            background: linear-gradient(90deg, #00d4ff, #7c3aed, #f472b6);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-            margin-bottom: 10px;
-        }
-        
-        .header p {
-            color: #94a3b8;
-            font-size: 0.9rem;
-        }
-        
-        .status-indicator {
-            display: inline-flex;
-            align-items: center;
-            gap: 8px;
-            background: rgba(34, 197, 94, 0.2);
-            padding: 5px 15px;
-            border-radius: 20px;
-            margin-top: 10px;
-        }
-        
-        .status-dot {
-            width: 10px;
-            height: 10px;
-            background: #22c55e;
-            border-radius: 50%;
-            animation: pulse 2s infinite;
-        }
-        
-        @keyframes pulse {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.5; }
-        }
-        
-        .dashboard {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-            gap: 20px;
-            max-width: 1400px;
-            margin: 0 auto;
-        }
-        
-        .card {
-            background: rgba(255, 255, 255, 0.05);
-            backdrop-filter: blur(10px);
-            border-radius: 16px;
-            padding: 25px;
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            transition: transform 0.3s, box-shadow 0.3s;
-        }
-        
-        .card:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
-        }
-        
-        .card-title {
-            font-size: 0.85rem;
-            color: #94a3b8;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            margin-bottom: 10px;
-        }
-        
-        .card-value {
-            font-size: 2.5rem;
-            font-weight: 700;
-            background: linear-gradient(90deg, #00d4ff, #7c3aed);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-        }
-        
-        .card-subtitle {
-            font-size: 0.8rem;
-            color: #64748b;
-            margin-top: 5px;
-        }
-        
-        .chart-card {
-            grid-column: span 2;
-        }
-        
-        .chart-container {
-            position: relative;
-            height: 250px;
-            margin-top: 15px;
-        }
-        
-        .stats-grid {
-            display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            gap: 15px;
-            margin-top: 15px;
-        }
-        
-        .stat-item {
-            text-align: center;
-            padding: 15px;
-            background: rgba(255, 255, 255, 0.03);
-            border-radius: 10px;
-        }
-        
-        .stat-label {
-            font-size: 0.75rem;
-            color: #64748b;
-            margin-bottom: 5px;
-        }
-        
-        .stat-value {
-            font-size: 1.5rem;
-            font-weight: 600;
-        }
-        
-        .stat-value.green { color: #22c55e; }
-        .stat-value.yellow { color: #eab308; }
-        .stat-value.red { color: #ef4444; }
-        .stat-value.blue { color: #3b82f6; }
-        
-        .progress-bar {
-            width: 100%;
-            height: 8px;
-            background: rgba(255, 255, 255, 0.1);
-            border-radius: 4px;
-            margin-top: 15px;
-            overflow: hidden;
-        }
-        
-        .progress-fill {
-            height: 100%;
-            background: linear-gradient(90deg, #22c55e, #3b82f6);
-            border-radius: 4px;
-            transition: width 0.5s ease;
-        }
-        
-        .footer {
-            text-align: center;
-            margin-top: 30px;
-            color: #64748b;
-            font-size: 0.8rem;
-        }
-        
-        .error-banner {
-            background: rgba(239, 68, 68, 0.2);
-            border: 1px solid rgba(239, 68, 68, 0.5);
-            color: #fca5a5;
-            padding: 15px;
-            border-radius: 10px;
-            text-align: center;
-            margin-bottom: 20px;
-            display: none;
-        }
-        
-        @media (max-width: 768px) {
-            .chart-card {
-                grid-column: span 1;
-            }
-            .stats-grid {
-                grid-template-columns: repeat(2, 1fr);
+    <!-- Inter Font -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    },
+                    colors: {
+                        border: "hsl(240 3.7% 15.9%)",
+                        input: "hsl(240 3.7% 15.9%)",
+                        ring: "hsl(240 4.9% 83.9%)",
+                        background: "hsl(240 10% 3.9%)",
+                        foreground: "hsl(0 0% 98%)",
+                        primary: {
+                            DEFAULT: "hsl(0 0% 98%)",
+                            foreground: "hsl(240 5.9% 10%)",
+                        },
+                        secondary: {
+                            DEFAULT: "hsl(240 3.7% 15.9%)",
+                            foreground: "hsl(0 0% 98%)",
+                        },
+                        muted: {
+                            DEFAULT: "hsl(240 3.7% 15.9%)",
+                            foreground: "hsl(240 5% 64.9%)",
+                        },
+                        accent: {
+                            DEFAULT: "hsl(240 3.7% 15.9%)",
+                            foreground: "hsl(0 0% 98%)",
+                        },
+                        card: {
+                            DEFAULT: "hsl(240 10% 3.9%)",
+                            foreground: "hsl(0 0% 98%)",
+                        },
+                    },
+                }
             }
         }
-    </style>
+    </script>
 </head>
-<body>
-    <div class="header">
-        <h1>🚀 Server Dashboard</h1>
-        <p>Real-time HTTP Server Statistics</p>
-        <div class="status-indicator">
-            <span class="status-dot"></span>
-            <span id="server-status">Connected</span>
-        </div>
-    </div>
-    
-    <div id="error-banner" class="error-banner">
-        Unable to connect to server. Retrying...
-    </div>
-    
-    <div class="dashboard">
-        <!-- Total Requests -->
-        <div class="card">
-            <div class="card-title">📊 Total Requests</div>
-            <div class="card-value" id="total-requests">0</div>
-            <div class="card-subtitle">since server start</div>
-        </div>
-        
-        <!-- Bytes Transferred -->
-        <div class="card">
-            <div class="card-title">📦 Data Transferred</div>
-            <div class="card-value" id="bytes-transferred">0 B</div>
-            <div class="card-subtitle">total bandwidth</div>
-        </div>
-        
-        <!-- Response Time -->
-        <div class="card">
-            <div class="card-title">⚡ Avg Response Time</div>
-            <div class="card-value" id="avg-response">0 ms</div>
-            <div class="card-subtitle">average latency</div>
-        </div>
-        
-        <!-- Active Connections -->
-        <div class="card">
-            <div class="card-title">🔗 Active Connections</div>
-            <div class="card-value" id="active-connections">0</div>
-            <div class="card-subtitle">currently processing</div>
-        </div>
-        
-        <!-- Status Codes Chart -->
-        <div class="card chart-card">
-            <div class="card-title">📈 HTTP Status Codes</div>
-            <div class="stats-grid">
-                <div class="stat-item">
-                    <div class="stat-label">200 OK</div>
-                    <div class="stat-value green" id="status-200">0</div>
-                </div>
-                <div class="stat-item">
-                    <div class="stat-label">404 Not Found</div>
-                    <div class="stat-value yellow" id="status-404">0</div>
-                </div>
-                <div class="stat-item">
-                    <div class="stat-label">500 Error</div>
-                    <div class="stat-value red" id="status-500">0</div>
-                </div>
+<body class="bg-background text-foreground font-sans min-h-screen p-6">
+    <div class="max-w-6xl mx-auto">
+        <!-- Header -->
+        <header class="mb-8 pb-4 border-b border-border">
+            <h1 class="text-2xl font-semibold tracking-tight">Server Dashboard</h1>
+            <p class="text-sm text-muted-foreground mt-1">Real-time server statistics</p>
+            <div class="flex items-center gap-2 mt-2">
+                <span class="relative flex h-2 w-2">
+                    <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                    <span class="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
+                </span>
+                <span class="text-xs text-green-500" id="server-status">Connected</span>
             </div>
-            <div class="chart-container">
-                <canvas id="statusChart"></canvas>
+        </header>
+
+        <!-- Stats Cards -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+            <!-- Total Requests -->
+            <div class="rounded-lg border border-border bg-card p-6">
+                <p class="text-xs font-medium text-muted-foreground uppercase tracking-wide">Total Requests</p>
+                <p class="text-3xl font-bold mt-2" id="total-requests">0</p>
+                <p class="text-xs text-muted-foreground mt-1">since start</p>
+            </div>
+            
+            <!-- Data Transferred -->
+            <div class="rounded-lg border border-border bg-card p-6">
+                <p class="text-xs font-medium text-muted-foreground uppercase tracking-wide">Data Transferred</p>
+                <p class="text-3xl font-bold mt-2" id="bytes-transferred">0 B</p>
+                <p class="text-xs text-muted-foreground mt-1">total bandwidth</p>
+            </div>
+            
+            <!-- Avg Response -->
+            <div class="rounded-lg border border-border bg-card p-6">
+                <p class="text-xs font-medium text-muted-foreground uppercase tracking-wide">Avg Response</p>
+                <p class="text-3xl font-bold mt-2" id="avg-response">0 ms</p>
+                <p class="text-xs text-muted-foreground mt-1">latency</p>
+            </div>
+            
+            <!-- Active Connections -->
+            <div class="rounded-lg border border-border bg-card p-6">
+                <p class="text-xs font-medium text-muted-foreground uppercase tracking-wide">Active</p>
+                <p class="text-3xl font-bold mt-2" id="active-connections">0</p>
+                <p class="text-xs text-muted-foreground mt-1">connections</p>
             </div>
         </div>
-        
-        <!-- Cache Stats -->
-        <div class="card">
-            <div class="card-title">💾 File Cache</div>
-            <div class="stats-grid" style="grid-template-columns: repeat(2, 1fr);">
-                <div class="stat-item">
-                    <div class="stat-label">Hits</div>
-                    <div class="stat-value green" id="cache-hits">0</div>
-                </div>
-                <div class="stat-item">
-                    <div class="stat-label">Misses</div>
-                    <div class="stat-value yellow" id="cache-misses">0</div>
+
+        <!-- Two Column Layout -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
+            <!-- HTTP Status Codes -->
+            <div class="rounded-lg border border-border bg-card p-6">
+                <h3 class="text-sm font-semibold mb-4">HTTP Status Codes</h3>
+                <div class="space-y-3">
+                    <div class="flex items-center justify-between py-2 border-b border-border">
+                        <span class="text-sm text-muted-foreground">200 OK</span>
+                        <span class="text-sm font-semibold text-green-500" id="status-200">0</span>
+                    </div>
+                    <div class="flex items-center justify-between py-2 border-b border-border">
+                        <span class="text-sm text-muted-foreground">404 Not Found</span>
+                        <span class="text-sm font-semibold text-yellow-500" id="status-404">0</span>
+                    </div>
+                    <div class="flex items-center justify-between py-2">
+                        <span class="text-sm text-muted-foreground">500 Server Error</span>
+                        <span class="text-sm font-semibold text-red-500" id="status-500">0</span>
+                    </div>
                 </div>
             </div>
-            <div class="card-subtitle" style="margin-top: 15px;">Hit Rate</div>
-            <div class="card-value" id="cache-hit-rate" style="font-size: 1.8rem;">0%</div>
-            <div class="progress-bar">
-                <div class="progress-fill" id="cache-progress" style="width: 0%;"></div>
-            </div>
-            <div class="card-subtitle" style="margin-top: 10px;">
-                <span id="cache-used">0 B</span> / <span id="cache-capacity">0 B</span>
+
+            <!-- Cache Performance -->
+            <div class="rounded-lg border border-border bg-card p-6">
+                <h3 class="text-sm font-semibold mb-4">Cache Performance</h3>
+                <div class="space-y-3">
+                    <div class="flex items-center justify-between py-2 border-b border-border">
+                        <span class="text-sm text-muted-foreground">Cache Hits</span>
+                        <span class="text-sm font-semibold text-green-500" id="cache-hits">0</span>
+                    </div>
+                    <div class="flex items-center justify-between py-2 border-b border-border">
+                        <span class="text-sm text-muted-foreground">Cache Misses</span>
+                        <span class="text-sm font-semibold text-yellow-500" id="cache-misses">0</span>
+                    </div>
+                </div>
+                <!-- Progress Bar -->
+                <div class="mt-4">
+                    <div class="flex justify-between text-xs mb-2">
+                        <span class="text-muted-foreground">Hit Rate</span>
+                        <span class="font-medium" id="cache-hit-rate">0%</span>
+                    </div>
+                    <div class="h-2 bg-secondary rounded-full overflow-hidden">
+                        <div class="h-full bg-blue-500 rounded-full transition-all duration-300" id="cache-progress" style="width: 0%"></div>
+                    </div>
+                </div>
             </div>
         </div>
-        
-        <!-- Requests History Chart -->
-        <div class="card chart-card">
-            <div class="card-title">📉 Requests Over Time</div>
-            <div class="chart-container">
+
+        <!-- Chart -->
+        <div class="rounded-lg border border-border bg-card p-6">
+            <h3 class="text-sm font-semibold mb-4">Requests / Second</h3>
+            <div class="h-[200px]">
                 <canvas id="requestsChart"></canvas>
             </div>
         </div>
+
+        <!-- Footer -->
+        <footer class="text-center text-xs text-muted-foreground mt-6">
+            Updates every 2 seconds
+        </footer>
     </div>
-    
-    <div class="footer">
-        <p>Dashboard updates every 2 seconds | ConcurrentHTTP Server v1.0</p>
-    </div>
-    
+
     <script>
-        // Format bytes to human-readable
         function formatBytes(bytes) {
             if (bytes === 0) return '0 B';
             const k = 1024;
-            const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+            const sizes = ['B', 'KB', 'MB', 'GB'];
             const i = Math.floor(Math.log(bytes) / Math.log(k));
-            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
         }
-        
-        // Format large numbers
+
         function formatNumber(num) {
             if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M';
             if (num >= 1000) return (num / 1000).toFixed(1) + 'K';
             return num.toString();
         }
-        
-        // Request history for chart
+
         const requestHistory = [];
-        const maxHistoryPoints = 30;
-        let lastTotalRequests = 0;
-        
-        // Initialize Charts
-        const statusCtx = document.getElementById('statusChart').getContext('2d');
-        const statusChart = new Chart(statusCtx, {
-            type: 'doughnut',
-            data: {
-                labels: ['200 OK', '404 Not Found', '500 Error'],
-                datasets: [{
-                    data: [0, 0, 0],
-                    backgroundColor: ['#22c55e', '#eab308', '#ef4444'],
-                    borderWidth: 0
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: {
-                    legend: {
-                        position: 'right',
-                        labels: { color: '#94a3b8' }
-                    }
-                }
-            }
-        });
-        
-        const requestsCtx = document.getElementById('requestsChart').getContext('2d');
-        const requestsChart = new Chart(requestsCtx, {
+        const maxPoints = 30;
+        let lastTotal = 0;
+
+        const ctx = document.getElementById('requestsChart').getContext('2d');
+        const chart = new Chart(ctx, {
             type: 'line',
             data: {
                 labels: [],
                 datasets: [{
-                    label: 'Requests/s',
                     data: [],
                     borderColor: '#3b82f6',
                     backgroundColor: 'rgba(59, 130, 246, 0.1)',
                     fill: true,
-                    tension: 0.4
+                    tension: 0.3,
+                    borderWidth: 2,
+                    pointRadius: 0
                 }]
             },
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
                 scales: {
-                    x: {
-                        display: false
-                    },
+                    x: { display: false },
                     y: {
                         beginAtZero: true,
-                        grid: { color: 'rgba(255,255,255,0.1)' },
-                        ticks: { color: '#94a3b8' }
+                        grid: { color: 'hsl(240 3.7% 15.9%)' },
+                        ticks: { color: 'hsl(240 5% 64.9%)', font: { size: 11 } }
                     }
                 },
-                plugins: {
-                    legend: { display: false }
-                }
+                plugins: { legend: { display: false } }
             }
         });
-        
-        // Fetch and update stats
-        async function updateStats() {
+
+        async function update() {
             try {
-                const response = await fetch('/api/stats');
-                if (!response.ok) throw new Error('API not available');
-                
-                const data = await response.json();
-                
-                // Hide error banner
-                document.getElementById('error-banner').style.display = 'none';
-                document.getElementById('server-status').textContent = 'Connected';
-                
-                // Update basic stats
+                const res = await fetch('/api/stats');
+                const data = await res.json();
+
                 document.getElementById('total-requests').textContent = formatNumber(data.total_requests);
                 document.getElementById('bytes-transferred').textContent = formatBytes(data.bytes_transferred);
-                document.getElementById('avg-response').textContent = data.avg_response_time_ms.toFixed(2) + ' ms';
+                document.getElementById('avg-response').textContent = data.avg_response_time_ms.toFixed(1) + ' ms';
                 document.getElementById('active-connections').textContent = data.active_connections;
-                
-                // Update status codes
+
                 document.getElementById('status-200').textContent = formatNumber(data.status_codes['200']);
                 document.getElementById('status-404').textContent = formatNumber(data.status_codes['404']);
                 document.getElementById('status-500').textContent = formatNumber(data.status_codes['500']);
-                
-                // Update status chart
-                statusChart.data.datasets[0].data = [
-                    data.status_codes['200'],
-                    data.status_codes['404'],
-                    data.status_codes['500']
-                ];
-                statusChart.update('none');
-                
-                // Update cache stats
+
                 document.getElementById('cache-hits').textContent = formatNumber(data.cache.hits);
                 document.getElementById('cache-misses').textContent = formatNumber(data.cache.misses);
                 document.getElementById('cache-hit-rate').textContent = data.cache.hit_rate.toFixed(1) + '%';
                 document.getElementById('cache-progress').style.width = data.cache.hit_rate + '%';
-                document.getElementById('cache-used').textContent = formatBytes(data.cache.bytes_used);
-                document.getElementById('cache-capacity').textContent = formatBytes(data.cache.capacity);
-                
-                // Update requests history chart
-                const requestsPerSecond = (data.total_requests - lastTotalRequests) / 2;
-                lastTotalRequests = data.total_requests;
-                
-                if (requestHistory.length === 0) {
-                    // First run, don't add the spike
-                } else {
-                    requestHistory.push(Math.max(0, requestsPerSecond));
-                    if (requestHistory.length > maxHistoryPoints) {
-                        requestHistory.shift();
-                    }
-                    
-                    requestsChart.data.labels = requestHistory.map((_, i) => i);
-                    requestsChart.data.datasets[0].data = requestHistory;
-                    requestsChart.update('none');
+
+                const rps = (data.total_requests - lastTotal) / 2;
+                lastTotal = data.total_requests;
+
+                if (requestHistory.length > 0 || rps === 0) {
+                    requestHistory.push(Math.max(0, rps));
+                    if (requestHistory.length > maxPoints) requestHistory.shift();
+                    chart.data.labels = requestHistory.map((_, i) => i);
+                    chart.data.datasets[0].data = requestHistory;
+                    chart.update('none');
                 }
-                
                 if (requestHistory.length === 0) requestHistory.push(0);
-                
-            } catch (error) {
-                document.getElementById('error-banner').style.display = 'block';
+
+                document.getElementById('server-status').textContent = 'Connected';
+            } catch (e) {
                 document.getElementById('server-status').textContent = 'Disconnected';
-                console.error('Failed to fetch stats:', error);
+                document.getElementById('server-status').className = 'text-xs text-red-500';
             }
         }
-        
-        // Initial update
-        updateStats();
-        
-        // Update every 2 seconds
-        setInterval(updateStats, 2000);
+
+        update();
+        setInterval(update, 2000);
     </script>
 </body>
 </html>
