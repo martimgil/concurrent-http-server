@@ -33,19 +33,21 @@ static const off_t LOG_MAX_SIZE = 10 * 1024 * 1024;
 // Number of rotated log files to keep
 static const int LOG_MAX_ROTATIONS = 5;
 
+// Log buffer (Feature 5: Buffering)
+#define LOG_BUFFER_SIZE 4096
+static char g_log_buffer[LOG_BUFFER_SIZE];
+static int g_buf_pos = 0;
+static time_t g_last_flush = 0;
+
 // #########################################################################################################
 // Internal function: Get current file size
 // #########################################################################################################
 static off_t get_file_size(int fd) { 
-
-    struct stat st; // File status structure
-
-    // Get file status
-    // fstat -> Get file status
+    struct stat st;
     if (fstat(fd, &st) == 0) {
-        return st.st_size; // Return file size
+        return st.st_size;
     }
-    return -1; // Error case
+    return -1;
 }
 
 
@@ -56,137 +58,133 @@ static off_t get_file_size(int fd) {
 
 // Rotates log files when the main log file exceeds the maximum size.
 static void rotate_logs() {
-
-    // Close current log file before rotating
-
-    if (g_log_fd >= 0) { // If log file is open
-        close(g_log_fd); // Close file
-        g_log_fd = -1; // Invalidate file descriptor
+    if (g_log_fd >= 0) {
+        close(g_log_fd);
+        g_log_fd = -1;
     }
 
-    char oldpath[600]; // Buffer for old path
-    char newpath[600]; // Buffer for new path
+    char oldpath[600];
+    char newpath[600];
 
     // Remove the oldest rotated log file
-    // snprintf -> Format string into buffer
-    snprintf(oldpath, sizeof(oldpath), "%s.%d", g_log_path, LOG_MAX_ROTATIONS); // Oldest log file 
-    unlink(oldpath); // Remove file
+    snprintf(oldpath, sizeof(oldpath), "%s.%d", g_log_path, LOG_MAX_ROTATIONS);
+    unlink(oldpath);
 
     // Shift rotated logs: N-1 → N, ..., 1 → 2
-    // LOG_MAX_ROTATIONS - 1 down to 1
-    for (int i = LOG_MAX_ROTATIONS - 1; i >= 1; i--) { // From N-1 down to 1
-
-        snprintf(oldpath, sizeof(oldpath), "%s.%d", g_log_path, i); // Current log file
-        snprintf(newpath, sizeof(newpath), "%s.%d", g_log_path, i + 1); // Next log file
-        rename(oldpath, newpath); // Rename (move) file
+    for (int i = LOG_MAX_ROTATIONS - 1; i >= 1; i--) {
+        snprintf(oldpath, sizeof(oldpath), "%s.%d", g_log_path, i);
+        snprintf(newpath, sizeof(newpath), "%s.%d", g_log_path, i + 1);
+        rename(oldpath, newpath);
     }
 
     // Move main log file to .1
-    snprintf(newpath, sizeof(newpath), "%s.1", g_log_path); // New name for main log file
-    rename(g_log_path, newpath); // Rename main log file
+    snprintf(newpath, sizeof(newpath), "%s.1", g_log_path);
+    rename(g_log_path, newpath);
 
     // Reopen main log file (empty)
-    // O_CREAT: create if not exists, O_WRONLY: write only, O_APPEND: append mode
-    g_log_fd = open(g_log_path, O_CREAT | O_WRONLY | O_APPEND, 0644); // Open new log file
+    g_log_fd = open(g_log_path, O_CREAT | O_WRONLY | O_APPEND, 0644);
 }
 
 
 // #########################################################################################################
 // Logger initialization
 // #########################################################################################################
-
-// Initializes the logger with the specified log file path.
 void logger_init(const char* logfile_path) {
-    // Store log file path
-    // strncpy -> Safe string copy
-    strncpy(g_log_path, logfile_path, sizeof(g_log_path) - 1); // Copy path
+    strncpy(g_log_path, logfile_path, sizeof(g_log_path) - 1);
+    g_log_path[sizeof(g_log_path) - 1] = '\0';
 
-    g_log_path[sizeof(g_log_path) - 1] = '\0'; // Ensure null-termination
-
-    // Create/open POSIX semaphore shared between processes
-    g_sem = sem_open(LOG_SEM_NAME, O_CREAT, 0666, 1); // Initial value 1
-
-    // Check for errors
+    g_sem = sem_open(LOG_SEM_NAME, O_CREAT, 0666, 1);
     if (g_sem == SEM_FAILED) {
         perror("logger: sem_open");
         exit(1);
     }
 
-    // Open log file
     g_log_fd = open(g_log_path, O_CREAT | O_WRONLY | O_APPEND, 0644);
-
-    // Check for errors
     if (g_log_fd < 0) {
         perror("logger: open logfile");
         exit(1);
     }
+    
+    g_buf_pos = 0;
+    g_last_flush = time(NULL);
 }
 
+
+// #########################################################################################################
+// Flush buffer to disk (Internal implementation, called with lock held)
+// #########################################################################################################
+static void flush_buffer_locked() {
+    if (g_buf_pos > 0 && g_log_fd >= 0) {
+        if (write(g_log_fd, g_log_buffer, g_buf_pos) < 0) {
+            perror("logger: write failed");
+        }
+        g_buf_pos = 0;
+        g_last_flush = time(NULL);
+    }
+}
+
+// Public flush function (Thread-safe)
+void logger_flush() {
+    if (!g_sem || g_log_fd < 0) return;
+    
+    sem_wait(g_sem);
+    flush_buffer_locked();
+    sem_post(g_sem);
+}
 
 // #########################################################################################################
 // Logger shutdown
 // #########################################################################################################
 void logger_close() { 
-    // Close log file descriptor
-    if (g_log_fd >= 0) { 
-        close(g_log_fd); // Close file
-        g_log_fd = -1; // Invalidate descriptor
+    if (g_sem) {
+        sem_wait(g_sem);
+        flush_buffer_locked(); // Ensure any remaining logs are written
+        sem_post(g_sem);
     }
 
+    if (g_log_fd >= 0) { 
+        close(g_log_fd);
+        g_log_fd = -1;
+    }
 
-    // Close semaphore
     if (g_sem) {
         sem_close(g_sem);
-        // NOTE: Do not call sem_unlink here to avoid race conditions on shutdown
     }
 }
 
 // #########################################################################################################
-// Write a log entry (with semaphore + automatic rotation)
+// Write a log entry (with semaphore + buffer + automatic rotation)
 // #########################################################################################################
-
-// Writes a log entry with the specified parameters.
 void logger_write(
-    const char* ip, // Client IP address
-    const char* method, // HTTP method
-    const char* path, // Request path
-    int status, // HTTP status code
-    size_t bytes_sent, // Number of bytes sent
-    long duration_ms // Request duration in milliseconds
+    const char* ip, 
+    const char* method, 
+    const char* path, 
+    int status, 
+    size_t bytes_sent, 
+    long duration_ms
 ) {
-
-    // Validate input parameters
     if (!g_sem || g_log_fd < 0) {
         return;
     }
 
-    // Enter critical section (locks processes + threads)
+    // Enter critical section
     sem_wait(g_sem); 
 
-    // Check if log file exceeds max size → rotate if needed
-    // get_file_size -> Get current file size
-    off_t size_now = get_file_size(g_log_fd); // Current log file size
-
-    // Rotate logs if size exceeds limit
+    // Rotate if needed (check size before writing)
+    off_t size_now = get_file_size(g_log_fd);
     if (size_now >= LOG_MAX_SIZE) {
-        rotate_logs(); // Perform log rotation
+        flush_buffer_locked(); // Flush before rotating
+        rotate_logs();
     }
 
-    // Get formatted timestamp
-    char datebuf[64]; // Buffer for date string
-
-    time_t now = time(NULL); // Current time
-
-    struct tm tm_now; // Local time structure
-
-    localtime_r(&now, &tm_now); // Convert to local time
-
-    strftime(datebuf, sizeof(datebuf), "%d/%b/%Y:%H:%M:%S", &tm_now); // Format date string
-
     // Format log line
-    char line[1024]; // Buffer for log line
+    char datebuf[64];
+    time_t now = time(NULL);
+    struct tm tm_now;
+    localtime_r(&now, &tm_now);
+    strftime(datebuf, sizeof(datebuf), "%d/%b/%Y:%H:%M:%S", &tm_now);
 
-    // snprintf -> Format string into buffer
+    char line[1024];
     int len = snprintf( 
         line,
         sizeof(line),
@@ -200,10 +198,19 @@ void logger_write(
         duration_ms
     );
 
-    // Write log line atomically
-    if (len > 0) {
-        if (write(g_log_fd, line, (size_t)len) < 0) {
-            perror("logger: write failed");
+    if (len > 0 && (size_t)len < sizeof(line)) {
+        // If line is too big for buffer, flush first
+        if (g_buf_pos + len >= LOG_BUFFER_SIZE) {
+             flush_buffer_locked();
+        }
+
+        // Append to buffer (will always fit after flush, since len < 1024 < 4096)
+        memcpy(g_log_buffer + g_buf_pos, line, (size_t)len);
+        g_buf_pos += len;
+        
+        // Time-based flush: Only flush if 5 seconds have passed since last flush
+        if (now - g_last_flush >= 5) {
+             flush_buffer_locked();
         }
     }
 

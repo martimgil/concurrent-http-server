@@ -61,30 +61,57 @@ echo "Parameters: ab -t 300 -c 50 (300 seconds, 50 concurrent connections)"
 echo "This will take approximately 5 minutes. Please wait..."
 echo ""
 
-# Run the extended load test
-# -n 10000000: very high request limit so time is the limiting factor
-# -t 300: 5 minutes (300 seconds)
-# -c 50: 50 concurrent connections
-OUTPUT=$(ab -n 10000000 -t 300 -c 50 -r -k "$BASE_URL/index.html" 2>&1)
+START_TIME=$(date +%s)
+DURATION=300
+END_TIME=$((START_TIME + DURATION))
 
-# Parse results
-FAILED_REQS=$(echo "$OUTPUT" | grep "Failed requests:" | awk '{print $3}')
-COMPLETE_REQS=$(echo "$OUTPUT" | grep "Complete requests:" | awk '{print $3}')
-REQUESTS_PER_SEC=$(echo "$OUTPUT" | grep "Requests per second:" | awk '{print $4}')
-TIME_PER_REQ=$(echo "$OUTPUT" | grep "Time per request:" | head -1 | awk '{print $4}')
+TOTAL_COMPLETE=0
+TOTAL_FAILED=0
 
-# Default to 0 if empty
-FAILED_REQS=${FAILED_REQS:-0}
-COMPLETE_REQS=${COMPLETE_REQS:-0}
+echo "Stress test started at $(date)"
+echo "Target duration: ${DURATION} seconds"
+
+while [ $(date +%s) -lt $END_TIME ]; do
+    CURRENT_TIME=$(date +%s)
+    REMAINING=$((END_TIME - CURRENT_TIME))
+    
+    # Safety check
+    if [ $REMAINING -le 0 ]; then break; fi
+    
+    echo "Running load batch... (~$REMAINING seconds remaining)"
+    
+    # Run ab with remaining time.
+    # Set -n very high (50 million) so -t (time) is the likely limiting factor.
+    # Even if it finishes early (high throughput), the loop will restart it.
+    OUTPUT=$(ab -t $REMAINING -n 50000000 -c 50 -r -k "$BASE_URL/index.html" 2>&1)
+    
+    BATCH_COMPLETE=$(echo "$OUTPUT" | grep "Complete requests:" | awk '{print $3}')
+    BATCH_FAILED=$(echo "$OUTPUT" | grep "Failed requests:" | awk '{print $3}')
+    
+    BATCH_COMPLETE=${BATCH_COMPLETE:-0}
+    BATCH_FAILED=${BATCH_FAILED:-0}
+    
+    TOTAL_COMPLETE=$((TOTAL_COMPLETE + BATCH_COMPLETE))
+    TOTAL_FAILED=$((TOTAL_FAILED + BATCH_FAILED))
+    
+    # Brief pause to let system breathe and prevent tight loop if ab fails instantly
+    sleep 0.2
+done
+
+ACTUAL_DURATION=$(( $(date +%s) - START_TIME ))
+if [ $ACTUAL_DURATION -le 0 ]; then ACTUAL_DURATION=1; fi
+
+FAILED_REQS=$TOTAL_FAILED
+COMPLETE_REQS=$TOTAL_COMPLETE
+# Calculate average RPS using awk
+REQUESTS_PER_SEC=$(awk -v c=$TOTAL_COMPLETE -v t=$ACTUAL_DURATION 'BEGIN {printf "%.2f", c/t}')
 
 echo ""
 echo "============================================================================="
-echo -e "${BOLD}Results:${NC}"
-echo "  Completed requests: $COMPLETE_REQS"
-echo "  Failed requests:    $FAILED_REQS"
-echo "  Requests/second:    $REQUESTS_PER_SEC"
-echo "  Time per request:   ${TIME_PER_REQ}ms"
-echo ""
+echo -e "${BOLD}Results (Total Duration: ${ACTUAL_DURATION}s):${NC}"
+echo "  Completed requests: $TOTAL_COMPLETE"
+echo "  Failed requests:    $TOTAL_FAILED"
+echo "  Requests/second:    $REQUESTS_PER_SEC (avg)"
 
 # Calculate failure rate
 if [ "$COMPLETE_REQS" -gt 0 ]; then

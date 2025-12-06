@@ -52,8 +52,8 @@ struct file_cache {
     size_t nbuckets;        // Number of hash buckets
     cache_entry_t **buckets; // Hash table buckets array
 
-    pthread_mutex_t mtx;    // Mutex for thread safety
-
+    pthread_rwlock_t rwlock;    // RWLock for thread safety (Requirement 4)
+    
     /* Statistics */
     size_t hits, misses, evictions; // Hits, misses, evictions
 };
@@ -236,7 +236,7 @@ file_cache_t *cache_create(size_t capacity_bytes) {
         free(c);  // Free cache structure
         return NULL; // Return NULL
     } 
-    pthread_mutex_init(&c->mtx, NULL); // Initialize mutex
+    pthread_rwlock_init(&c->rwlock, NULL); // Initialize rwlock
 
     return c; // Return created cache
 }
@@ -253,7 +253,7 @@ void cache_destroy(file_cache_t *c) {
         return;
     }
 
-    pthread_mutex_lock(&c->mtx); // Lock mutex
+    pthread_rwlock_wrlock(&c->rwlock); // Lock for writing (cleanup modifies)
 
     // Free all entries in all buckets
     for (size_t i = 0; i < c->nbuckets; ++i) { // For each bucket
@@ -274,8 +274,8 @@ void cache_destroy(file_cache_t *c) {
         }
     }
 
-    pthread_mutex_unlock(&c->mtx); // Unlock mutex
-    pthread_mutex_destroy(&c->mtx); // Destroy mutex
+    pthread_rwlock_unlock(&c->rwlock); // Unlock
+    pthread_rwlock_destroy(&c->rwlock); // Destroy rwlock
 
     // Free buckets array and cache structure
     free(c->buckets);
@@ -299,7 +299,7 @@ bool cache_acquire(file_cache_t *c, const char *key, cache_handle_t *out) {
         return false;
     }
 
-    pthread_mutex_lock(&c->mtx); // Lock cache for thread safety
+    pthread_rwlock_wrlock(&c->rwlock); // Lock for writing (updates LRU)
 
     // Compute hash bucket index for the key
     unsigned long h = hash_key(key) % c->nbuckets;
@@ -310,7 +310,7 @@ bool cache_acquire(file_cache_t *c, const char *key, cache_handle_t *out) {
     if (!e) {
         // Entry not found: increment miss counter and return false
         c->misses++;
-        pthread_mutex_unlock(&c->mtx);
+        pthread_rwlock_unlock(&c->rwlock);
         return false;
     }
 
@@ -328,7 +328,7 @@ bool cache_acquire(file_cache_t *c, const char *key, cache_handle_t *out) {
     // Increment hit counter
     c->hits++;
 
-    pthread_mutex_unlock(&c->mtx); // Unlock cache
+    pthread_rwlock_unlock(&c->rwlock); // Unlock cache
 
     return true;
 }
@@ -347,7 +347,7 @@ void cache_release(file_cache_t *c, cache_handle_t *h) {
     if (!c || !h || !h->_entry)
         return;
 
-    pthread_mutex_lock(&c->mtx); // Lock cache for thread safety
+    pthread_rwlock_wrlock(&c->rwlock); // Lock for writing (updates refcnt and may evict)
 
     cache_entry_t *e = (cache_entry_t*)h->_entry; // Get entry from handle
 
@@ -367,7 +367,7 @@ void cache_release(file_cache_t *c, cache_handle_t *h) {
     }
 
     // Unlock cache
-    pthread_mutex_unlock(&c->mtx);
+    pthread_rwlock_unlock(&c->rwlock);
 }
 
 /*
@@ -472,7 +472,7 @@ bool cache_load_file(file_cache_t *c, const char *key, const char *abs_path, cac
     if (!read_file_into_memory(abs_path, &buf, &sz))
         return false;
 
-    pthread_mutex_lock(&c->mtx); // Lock cache for thread safety
+    pthread_rwlock_wrlock(&c->rwlock); // Lock for writing (inserts new entry)
 
     // Double-check if another thread loaded it while we were reading
     unsigned long h = hash_key(key) % c->nbuckets; // Hash bucket index
@@ -493,7 +493,7 @@ bool cache_load_file(file_cache_t *c, const char *key, const char *abs_path, cac
 
         c->hits++; // Increment hit counter
 
-        pthread_mutex_unlock(&c->mtx); // Unlock cache
+        pthread_rwlock_unlock(&c->rwlock); // Unlock cache
 
         free(buf);  // Free the buffer we read
 
@@ -505,7 +505,7 @@ bool cache_load_file(file_cache_t *c, const char *key, const char *abs_path, cac
 
     // Check for allocation failure
     if (!e) {
-        pthread_mutex_unlock(&c->mtx); // Unlock cache
+        pthread_rwlock_unlock(&c->rwlock); // Unlock cache
         free(buf); // Free file buffer
         return false;
     }
@@ -515,7 +515,7 @@ bool cache_load_file(file_cache_t *c, const char *key, const char *abs_path, cac
 
     // Check for strdup failure
     if (!e->key) {
-        pthread_mutex_unlock(&c->mtx); // Unlock cache
+        pthread_rwlock_unlock(&c->rwlock); // Unlock cache
 
         free(buf); // Free file buffer
         free(e); // Free entry
@@ -542,7 +542,7 @@ bool cache_load_file(file_cache_t *c, const char *key, const char *abs_path, cac
     out->size = e->size;
     out->_entry = e;
 
-    pthread_mutex_unlock(&c->mtx);
+    pthread_rwlock_unlock(&c->rwlock);
     return true;
 }
 
@@ -558,7 +558,7 @@ bool cache_invalidate(file_cache_t *c, const char *key) {
     if (!c || !key)
         return false;
 
-    pthread_mutex_lock(&c->mtx); // Lock cache for thread safety
+    pthread_rwlock_wrlock(&c->rwlock); // Lock for writing (removes entry)
 
     // Find the entry in the hash bucket
     unsigned long h = hash_key(key) % c->nbuckets; // Hash bucket index
@@ -568,13 +568,13 @@ bool cache_invalidate(file_cache_t *c, const char *key) {
 
     // If not found, return false
     if (!e) {
-        pthread_mutex_unlock(&c->mtx); // Unlock cache
+        pthread_rwlock_unlock(&c->rwlock); // Unlock cache
         return false;
     }
 
     // Only invalidate if not in use
     if (e->refcnt > 0) {
-        pthread_mutex_unlock(&c->mtx); // Unlock cache
+        pthread_rwlock_unlock(&c->rwlock); // Unlock cache
         return false;
     }
 
@@ -589,7 +589,7 @@ bool cache_invalidate(file_cache_t *c, const char *key) {
     free(e->key);
     free(e);
 
-    pthread_mutex_unlock(&c->mtx); // Unlock cache
+    pthread_rwlock_unlock(&c->rwlock); // Unlock cache
 
     return true;
 }
@@ -613,7 +613,7 @@ void cache_stats(
     if (!c)
         return;
 
-    pthread_mutex_lock(&c->mtx); // Lock cache for thread safety
+    pthread_rwlock_rdlock(&c->rwlock); // Read Lock (stats only read)
 
 
     // Copy statistics to output parameters if not NULL
@@ -635,5 +635,5 @@ void cache_stats(
     if (out_evictions)
         *out_evictions = c->evictions; // Cache evictions
 
-    pthread_mutex_unlock(&c->mtx); // Unlock cache
+    pthread_rwlock_unlock(&c->rwlock); // Unlock cache
 }

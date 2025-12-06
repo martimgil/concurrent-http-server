@@ -190,6 +190,73 @@ void handle_client_request(int client_fd, shared_data_t* shm, semaphores_t* sems
         return;
     }
 
+    // BONUS FEATURE: Real-time Dashboard API endpoint
+    if (strcmp(req.path, "/api/stats") == 0) {
+        // Read stats from shared memory (thread-safe)
+        sem_wait(sems->stats_mutex);
+        long total_reqs = shm->stats.total_requests;
+        long bytes_trans = shm->stats.bytes_transferred;
+        long s200 = shm->stats.status_200;
+        long s404 = shm->stats.status_404;
+        long s500 = shm->stats.status_500;
+        long total_time = shm->stats.total_response_time_ms;
+        int active = shm->stats.active_connections;
+        sem_post(sems->stats_mutex);
+        
+        // Calculate average response time
+        double avg_time = (total_reqs > 0) ? (double)total_time / total_reqs : 0.0;
+        
+        // Get cache stats
+        file_cache_t* cache = worker_get_cache();
+        size_t cache_items = 0, cache_bytes = 0, cache_capacity = 0;
+        size_t cache_hits = 0, cache_misses = 0, cache_evictions = 0;
+        if (cache) {
+            cache_stats(cache, &cache_items, &cache_bytes, &cache_capacity, 
+                       &cache_hits, &cache_misses, &cache_evictions);
+        }
+        
+        // Build JSON response
+        char json[2048];
+        int json_len = snprintf(json, sizeof(json),
+            "{"
+            "\"total_requests\":%ld,"
+            "\"bytes_transferred\":%ld,"
+            "\"active_connections\":%d,"
+            "\"avg_response_time_ms\":%.2f,"
+            "\"status_codes\":{"
+                "\"200\":%ld,"
+                "\"404\":%ld,"
+                "\"500\":%ld"
+            "},"
+            "\"cache\":{"
+                "\"items\":%zu,"
+                "\"bytes_used\":%zu,"
+                "\"capacity\":%zu,"
+                "\"hits\":%zu,"
+                "\"misses\":%zu,"
+                "\"evictions\":%zu,"
+                "\"hit_rate\":%.2f"
+            "},"
+            "\"uptime_info\":\"Running\""
+            "}",
+            total_reqs, bytes_trans, active, avg_time,
+            s200, s404, s500,
+            cache_items, cache_bytes, cache_capacity,
+            cache_hits, cache_misses, cache_evictions,
+            (cache_hits + cache_misses > 0) ? 
+                (double)cache_hits / (cache_hits + cache_misses) * 100.0 : 0.0
+        );
+        
+        send_http_response(client_fd, 200, "OK", "application/json", json, json_len, 0);
+        status_code = 200;
+        bytes_sent = json_len;
+        long end_time = get_time_ms();
+        update_stats(shm, sems, status_code, bytes_sent, end_time - start_time);
+        logger_write("127.0.0.1", req.method, req.path, status_code, (size_t)bytes_sent, end_time - start_time);
+        close(client_fd);
+        return;
+    }
+
     const char* docroot = worker_get_document_root();
     const char* relpath = (strcmp(req.path, "/") == 0) ? "/index.html" : req.path;
 

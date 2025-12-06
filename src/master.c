@@ -246,12 +246,23 @@ static semaphores_t* init_semaphore_system(int queue_size) {
 // The worker ignores the stored value (since it receives the real FD via SCM_RIGHTS).
 // ###################################################################################################################
 
-// Returns 0 on success; -1 on error
-static int enqueue_connection(shared_data_t* shm, semaphores_t* sems, int worker_id, int placeholder_fd) {
+// Returns 0 on success; -1 on error; -2 on queue full (rejection)
+static int enqueue_connection(shared_data_t* shm, semaphores_t* sems, int worker_id, int client_fd) {
 
-    // Wait for a free slot
-    if (sem_wait(sems->empty_slots) != 0) {
-        perror("sem_wait(empty_slots)");
+    // Non-blocking wait for a free slot to implement "Reject with 503" requirement
+    if (sem_trywait(sems->empty_slots) != 0) {
+        if (errno == EAGAIN) {
+             // Queue is full - Send 503 Service Unavailable
+             const char* response = "HTTP/1.1 503 Service Unavailable\r\n"
+                                    "Content-Type: text/html\r\n"
+                                    "Content-Length: 35\r\n"
+                                    "Connection: close\r\n\r\n"
+                                    "<h1>503 Service Unavailable</h1>";
+             // Best effort write (ignore result)
+             if (write(client_fd, response, strlen(response)) < 0) { /* ignore */ }
+             return -2; // Indication of rejection
+        }
+        perror("sem_trywait(empty_slots)");
         return -1;
     }
 
@@ -266,7 +277,7 @@ static int enqueue_connection(shared_data_t* shm, semaphores_t* sems, int worker
     // Insert at position rear (front + count) % MAX_QUEUE_SIZE
     int pos = (shm->queue.front + shm->queue.count) % MAX_QUEUE_SIZE;
     shm->queue.items[pos].worker_id = worker_id;
-    shm->queue.items[pos].placeholder_fd = placeholder_fd;
+    shm->queue.items[pos].placeholder_fd = client_fd; // Storing it mostly for debug
     shm->queue.count++;
 
     // Release critical section
@@ -505,8 +516,11 @@ int main(int argc, char* argv[]) {
         rr = (rr + 1) % num_workers;
 
         // Enqueue the connection in the shared queue for the chosen worker
-        if (enqueue_connection(shm, sems, w, client_fd) != 0) {
-            // If the queue is full or semaphore error, reject connection
+        int ret = enqueue_connection(shm, sems, w, client_fd);
+        if (ret != 0) {
+            // If ret == -2, 503 response was already sent.
+            // If ret == -1, error occurred.
+            // In both cases, close and loop.
             close(client_fd);
             continue;
         }

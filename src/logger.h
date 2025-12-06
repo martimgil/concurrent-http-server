@@ -39,6 +39,11 @@ void logger_write(const char* ip, // Client IP address
                   int status, // HTTP status code
                   size_t bytes_sent, // Number of bytes sent
                   long duration_ms); // Request duration in milliseconds  
+
+/**
+ * Flushes any buffered log entries to disk.
+ */
+void logger_flush(void);
                   
 
 #endif // LOGGER_H

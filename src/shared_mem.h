@@ -1,6 +1,6 @@
 #ifndef SHARED_MEM_H
 #define SHARED_MEM_H
-#define MAX_QUEUE_SIZE 5000
+#define MAX_QUEUE_SIZE 100
 
 // Structure to hold server statistics in shared memory
 typedef struct {
