@@ -84,10 +84,10 @@ static char g_docroot[256];
 
 /**
  * Signal handler to gracefully stop the worker process.
+ * Note: Must be async-signal-safe - only use safe functions.
  */
 void worker_signal_handler(int signum) {
-    fprintf(stderr, "Worker: Received signal %d, shutting down\n", signum);
-    fflush(stderr);
+    (void)signum;  // Suppress unused warning
     worker_running = 0;
 }
 
@@ -268,9 +268,14 @@ static int re_enqueue_connection(shared_data_t* shm, semaphores_t* sems, connect
  * channel_fd -> UNIX socket file descriptor for receiving client sockets.
  */
 void worker_main(shared_data_t* shm, semaphores_t* sems, int worker_id, int channel_fd) {
-    // Register signal handler for graceful shutdown
-    signal(SIGTERM, worker_signal_handler);
-    signal(SIGINT, worker_signal_handler);
+    // Register signal handler using sigaction WITHOUT SA_RESTART
+    // This ensures sem_timedwait returns EINTR when signal is received
+    struct sigaction sa;
+    sa.sa_handler = worker_signal_handler;
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags = 0;  // No SA_RESTART - syscalls will return EINTR
+    sigaction(SIGTERM, &sa, NULL);
+    sigaction(SIGINT, &sa, NULL);
 
     // Create a thread pool with 10 threads and a bounded queue of 2000 jobs
     // Note: the thread pool will typically call the logic that serves requests (HTTP) and,
