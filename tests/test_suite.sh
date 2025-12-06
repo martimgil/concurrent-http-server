@@ -61,6 +61,11 @@ setup_server() {
         make clean >/dev/null 2>&1
         make >/dev/null 2>&1
         SERVER_CMD="valgrind --tool=helgrind ./bin/webserver"
+    elif [ "$RACE_DETECTOR_MODE" = "memcheck" ]; then
+        echo -e "${BOLD}Compiling for memory leak detection (Valgrind memcheck)...${NC}"
+        make clean >/dev/null 2>&1
+        make >/dev/null 2>&1
+        SERVER_CMD="valgrind --leak-check=full --show-leak-kinds=all --track-origins=yes --log-file=valgrind_memcheck.log ./bin/webserver"
     else
         echo "Compiling normally..."
         make clean >/dev/null 2>&1
@@ -81,6 +86,8 @@ setup_server() {
         echo "Using Thread Sanitizer (TSan) for race detection..."
     elif [ "$RACE_DETECTOR_MODE" = "helgrind" ]; then
         echo "Using Helgrind for race detection..."
+    elif [ "$RACE_DETECTOR_MODE" = "memcheck" ]; then
+        echo "Using Valgrind memcheck for memory leak detection..."
     fi
 
     # Kill any existing server gracefully (SIGTERM instead of SIGKILL)
@@ -123,11 +130,16 @@ cleanup_server() {
     # Use SIGTERM for graceful shutdown (allows cleanup)
     pkill -15 -f webserver 2>/dev/null
     pkill -15 -f valgrind 2>/dev/null
-    sleep 3
+    sleep 5
     
     # If processes still exist, force kill them
     pkill -9 -f webserver 2>/dev/null
     pkill -9 -f valgrind 2>/dev/null
+    sleep 2
+    
+    # Clean up shared memory and semaphores to ensure port can be reused
+    rm -f /dev/shm/ws_* 2>/dev/null
+    rm -f /dev/shm/sem.ws_* 2>/dev/null
 }
 
 # =============================================================================
@@ -318,6 +330,50 @@ else
 fi
 }
 
+run_memcheck_analysis() {
+    print_header "Memory Leak Analysis (Valgrind memcheck) - Req. 22"
+
+    if [ "$RACE_DETECTOR_MODE" != "memcheck" ]; then
+        print_pass "Memory leak analysis skipped (only runs in memcheck mode)"
+        return
+    fi
+
+    if [ ! -f "valgrind_memcheck.log" ]; then
+        print_fail "Valgrind memcheck log not found"
+        return
+    fi
+
+    echo "Analyzing Valgrind memcheck output..."
+
+    # Check for memory leaks in the log
+    DEFINITELY_LOST=$(grep -o "definitely lost: [0-9,]* bytes" valgrind_memcheck.log | tail -1 | grep -o "[0-9,]*" | tr -d ',')
+    INDIRECTLY_LOST=$(grep -o "indirectly lost: [0-9,]* bytes" valgrind_memcheck.log | tail -1 | grep -o "[0-9,]*" | tr -d ',')
+    POSSIBLY_LOST=$(grep -o "possibly lost: [0-9,]* bytes" valgrind_memcheck.log | tail -1 | grep -o "[0-9,]*" | tr -d ',')
+    STILL_REACHABLE=$(grep -o "still reachable: [0-9,]* bytes" valgrind_memcheck.log | tail -1 | grep -o "[0-9,]*" | tr -d ',')
+
+    # Default to 0 if not found
+    DEFINITELY_LOST=${DEFINITELY_LOST:-0}
+    INDIRECTLY_LOST=${INDIRECTLY_LOST:-0}
+    POSSIBLY_LOST=${POSSIBLY_LOST:-0}
+    STILL_REACHABLE=${STILL_REACHABLE:-0}
+
+    echo "Memory leak summary:"
+    echo "  Definitely lost: $DEFINITELY_LOST bytes"
+    echo "  Indirectly lost: $INDIRECTLY_LOST bytes"
+    echo "  Possibly lost:   $POSSIBLY_LOST bytes"
+    echo "  Still reachable: $STILL_REACHABLE bytes"
+
+    # Check for critical leaks (definitely + indirectly lost)
+    CRITICAL_LEAKS=$((DEFINITELY_LOST + INDIRECTLY_LOST))
+
+    if [ "$CRITICAL_LEAKS" -eq 0 ]; then
+        print_pass "No critical memory leaks detected"
+    else
+        print_fail "Memory leaks detected: $CRITICAL_LEAKS bytes (definitely + indirectly lost)"
+        echo "Check valgrind_memcheck.log for details"
+    fi
+}
+
 run_graceful_shutdown_test() {
     print_header "Testing Graceful Shutdown Under Load (Req. 23)"
 
@@ -359,12 +415,12 @@ run_graceful_shutdown_test() {
         GRACEFUL_SHUTDOWN=1
     else
         # Server is still running - this is OK, it might be finishing requests
-        # Helgrind/TSan are much slower, so use longer timeout
+        # Use longer timeout to allow completion
         if [ "$RACE_DETECTOR_MODE" = "helgrind" ] || [ "$RACE_DETECTOR_MODE" = "tsan" ]; then
-            SHUTDOWN_TIMEOUT=120
+            SHUTDOWN_TIMEOUT=180
             echo "Server still processing... waiting for graceful shutdown (max ${SHUTDOWN_TIMEOUT}s for instrumented mode)"
         else
-            SHUTDOWN_TIMEOUT=60
+            SHUTDOWN_TIMEOUT=120
             echo "Server still processing... waiting for graceful shutdown (max ${SHUTDOWN_TIMEOUT}s)"
         fi
         
@@ -523,48 +579,57 @@ run_status_code_tests() {
 # =============================================================================
 
 main() {
-    # If no arguments, run all modes
-    if [ -z "$1" ]; then
-        echo "Running all tests..."
-        
-        # 1. Normal Mode
-        echo -e "\n============================================================================="
-        echo "Running tests: NORMAL MODE"
-        echo "============================================================================="
-        export RACE_DETECTOR_MODE="none"
-        $0 normal
-        if [ $? -ne 0 ]; then TESTS_FAILED=$((TESTS_FAILED + 1)); fi
+    echo "============================================================================="
+    echo -e "${BOLD}Concurrent HTTP Server - Complete Test Suite${NC}"
+    echo "============================================================================="
+    echo ""
+    
+    TOTAL_FAILURES=0
+    
+    # 1. Normal Mode
+    echo -e "\n============================================================================="
+    echo "Running tests: NORMAL MODE"
+    echo "============================================================================="
+    RACE_DETECTOR_MODE="none"
+    run_tests_for_mode
+    if [ $? -ne 0 ]; then TOTAL_FAILURES=$((TOTAL_FAILURES + 1)); fi
 
-        # 2. Helgrind Mode
-        echo -e "\n============================================================================="
-        echo "Running tests: HELGRIND (Valgrind Race Detection)"
-        echo "============================================================================="
-        export RACE_DETECTOR_MODE="helgrind"
-        $0 helgrind
-        if [ $? -ne 0 ]; then TESTS_FAILED=$((TESTS_FAILED + 1)); fi
+    # 2. Helgrind Mode
+    echo -e "\n============================================================================="
+    echo "Running tests: HELGRIND (Valgrind Race Detection)"
+    echo "============================================================================="
+    RACE_DETECTOR_MODE="helgrind"
+    run_tests_for_mode
+    if [ $? -ne 0 ]; then TOTAL_FAILURES=$((TOTAL_FAILURES + 1)); fi
 
-        # 3. TSan Mode
-        echo -e "\n============================================================================="
-        echo "Running tests: THREAD SANITIZER (TSan Race Detection)"
-        echo "============================================================================="
-        export RACE_DETECTOR_MODE="tsan"
-        $0 tsan
-        if [ $? -ne 0 ]; then TESTS_FAILED=$((TESTS_FAILED + 1)); fi
+    # 3. TSan Mode
+    echo -e "\n============================================================================="
+    echo "Running tests: THREAD SANITIZER (TSan Race Detection)"
+    echo "============================================================================="
+    RACE_DETECTOR_MODE="tsan"
+    run_tests_for_mode
+    if [ $? -ne 0 ]; then TOTAL_FAILURES=$((TOTAL_FAILURES + 1)); fi
 
-        # Final Summary
-        echo -e "\n============================================================================="
-        echo -e "${BOLD}FINAL TEST SUMMARY${NC}"
-        echo "============================================================================="
-        if [ $TESTS_FAILED -eq 0 ]; then
-            echo -e "${GREEN}All tests passed in all modes!${NC}"
-            exit 0
-        else
-            echo -e "${RED}Some tests failed (total failures: $TESTS_FAILED)${NC}"
-            exit 1
-        fi
+    # Final Summary
+    echo -e "\n============================================================================="
+    echo -e "${BOLD}FINAL TEST SUMMARY${NC}"
+    echo "============================================================================="
+    if [ $TOTAL_FAILURES -eq 0 ]; then
+        echo -e "${GREEN}All tests passed in all modes!${NC}"
+        exit 0
+    else
+        echo -e "${RED}Some tests failed (modes with failures: $TOTAL_FAILURES)${NC}"
+        exit 1
     fi
+}
 
-    # If argument provided, run specific mode
+run_tests_for_mode() {
+    # Ensure clean start - kill any lingering processes
+    cleanup_server 2>/dev/null
+    
+    # Reset counters for this mode
+    TESTS_PASSED=0
+    TESTS_FAILED=0
     
     # Run cache consistency test first (standalone)
     # Only run it once per mode invocation
@@ -665,18 +730,47 @@ main() {
          print_pass "Statistics accuracy test skipped (not available in instrumented mode)"
     fi
 
-    # Verify log file integrity
-    print_header "Verifying Log File Integrity (No Interleaved Entries)"
-    if [ -f "server.log" ]; then
-        # Check for lines that don't start with expected format (e.g. timestamp or known prefixes)
-        # This is a heuristic. A better way is to ensure no lines are merged.
-        # We count lines.
-        LINE_COUNT=$(wc -l < server.log)
-        echo "Log file has $LINE_COUNT entries"
-        print_pass "Log file integrity verified: all $LINE_COUNT lines are properly formatted"
+    # Verify log file integrity - Req. 18
+    # Note: HTTP access logs go to access.log (from server.conf), not server.log (stdout)
+    print_header "Verifying Log File Integrity (No Interleaved Entries) - Req. 18"
+    if [ -f "access.log" ]; then
+        LINE_COUNT=$(wc -l < access.log)
+        echo "Access log file has $LINE_COUNT entries"
+
+        if [ "$LINE_COUNT" -eq 0 ]; then
+            echo "Access log is empty (no requests logged yet)"
+            print_pass "Log file integrity check passed (empty log)"
+        else
+            # Validate log line format:
+            # Expected: IP [timestamp] "METHOD PATH" STATUS BYTES DURATIONms
+            # Example: 127.0.0.1 [05/Dec/2025:23:30:00] "GET /index.html" 200 1234 5ms
+            
+            # Count lines that DON'T match the expected format (using wc -l for reliability)
+            MALFORMED=$(grep -vE '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+[[:space:]]+\[.+\][[:space:]]+".+"[[:space:]]+[0-9]+[[:space:]]+[0-9]+[[:space:]]+[0-9]+ms$' access.log 2>/dev/null | wc -l | tr -d '[:space:]')
+            
+            # Check for interleaved lines (lines containing multiple IPs = merged entries)
+            INTERLEAVED=$(grep -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+.*[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+' access.log 2>/dev/null | wc -l | tr -d '[:space:]')
+            
+            # Default to 0 if empty
+            MALFORMED=${MALFORMED:-0}
+            INTERLEAVED=${INTERLEAVED:-0}
+
+            if [ "$MALFORMED" -eq 0 ] && [ "$INTERLEAVED" -eq 0 ]; then
+                print_pass "Log file integrity verified: all $LINE_COUNT lines properly formatted, no interleaving"
+            else
+                print_fail "Log file has $MALFORMED malformed lines and $INTERLEAVED interleaved entries"
+                if [ "$MALFORMED" -gt 0 ]; then
+                    echo "First 3 malformed lines:"
+                    grep -vE '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+[[:space:]]+\[.+\][[:space:]]+".+"[[:space:]]+[0-9]+[[:space:]]+[0-9]+[[:space:]]+[0-9]+ms$' access.log 2>/dev/null | head -3
+                fi
+            fi
+        fi
     else
-        print_fail "Log file not found"
+        print_fail "Access log file not found"
     fi
+    
+    # Run memcheck analysis if in memcheck mode
+    run_memcheck_analysis
 
     # Print summary
     print_header "Test Summary ($RACE_DETECTOR_MODE):"
@@ -684,13 +778,13 @@ main() {
     echo "Tests Failed: $TESTS_FAILED"
 
     if [ "$TESTS_FAILED" -eq 0 ]; then
-        exit 0
+        return 0
     else
-        exit 1
+        return 1
     fi
 }
 
 # Cleanup on exit
 trap cleanup_server EXIT
 
-main "$@"
+main

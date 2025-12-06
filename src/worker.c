@@ -4,6 +4,7 @@
 #include <signal.h>
 #include <sys/socket.h>
 #include <sys/un.h>
+#include <sys/select.h>
 #include <errno.h>
 #include <string.h>
 #include <time.h>
@@ -23,10 +24,28 @@
 
 /**
  * Receives a file descriptor sent over a Unix domain socket.
+ * Uses select() with timeout to allow graceful shutdown.
  * @param socket The Unix domain socket file descriptor.
- * @return The received file descriptor, or -1 on error.
+ * @return The received file descriptor, or -1 on error/timeout.
  */
 static int recv_fd(int socket) {
+    // Use select() with timeout to allow periodic shutdown checks
+    fd_set readfds;
+    struct timeval tv;
+    
+    FD_ZERO(&readfds);
+    FD_SET(socket, &readfds);
+    
+    // 1 second timeout
+    tv.tv_sec = 1;
+    tv.tv_usec = 0;
+    
+    int ret = select(socket + 1, &readfds, NULL, NULL, &tv);
+    if (ret <= 0) {
+        // Timeout or error - return -1 to allow shutdown check
+        return -1;
+    }
+    
     struct msghdr msg = {0};
     char buf[1];
     struct iovec io = { .iov_base = buf, .iov_len = 1 };
@@ -46,7 +65,9 @@ static int recv_fd(int socket) {
     if (recvmsg(socket, &msg, 0) < 0) {
         // Important: do not exit; return -1 and let the caller decide.
         // EINTR is common during shutdown; the caller will check worker_running.
-        perror("Failed to receive fd");
+        if (errno != EINTR) {
+            perror("Failed to receive fd");
+        }
         return -1;
     }
 
