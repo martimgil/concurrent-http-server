@@ -4,6 +4,7 @@
 #include <signal.h>
 #include <sys/socket.h>
 #include <sys/un.h>
+#include <sys/select.h>
 #include <errno.h>
 #include <string.h>
 #include <time.h>
@@ -23,10 +24,37 @@
 
 /**
  * Receives a file descriptor sent over a Unix domain socket.
+ * Uses select() with timeout to allow periodic shutdown checks.
  * @param socket The Unix domain socket file descriptor.
- * @return The received file descriptor, or -1 on error.
+ * @return The received file descriptor, or -1 on error, or -2 on timeout.
  */
 static int recv_fd(int socket) {
+    // Use select() with timeout to allow periodic shutdown checks
+    fd_set read_fds;
+    struct timeval tv;
+    
+    FD_ZERO(&read_fds);
+    FD_SET(socket, &read_fds);
+    
+    // Timeout of 1 second to allow periodic shutdown checks
+    tv.tv_sec = 1;
+    tv.tv_usec = 0;
+    
+    int ret = select(socket + 1, &read_fds, NULL, NULL, &tv);
+    
+    if (ret < 0) {
+        if (errno == EINTR) {
+            return -1; // Interrupted, caller should check worker_running
+        }
+        perror("select in recv_fd");
+        return -1;
+    }
+    
+    if (ret == 0) {
+        // Timeout - return special value to indicate timeout (not error)
+        return -2;
+    }
+
     struct msghdr msg = {0};
     char buf[1];
     struct iovec io = { .iov_base = buf, .iov_len = 1 };
@@ -170,6 +198,11 @@ static connection_item_t dequeue_connection(shared_data_t* shm, semaphores_t* se
     // Wait for an available item with timeout to allow periodic shutdown checks
     struct timespec ts;
     while (1) {
+        // Check shutdown before waiting
+        if (!worker_running) {
+            return item;
+        }
+        
         // Set timeout to 1 second from now
         clock_gettime(CLOCK_REALTIME, &ts);
         ts.tv_sec += 1;
@@ -203,10 +236,31 @@ static connection_item_t dequeue_connection(shared_data_t* shm, semaphores_t* se
         return item;
     }
 
-    // Critical section for queue access
-    if (sem_wait(sems->queue_mutex) != 0) {
-        perror("sem_wait(queue_mutex)");
-        // Restore the filled slot in case of failure
+    // Critical section for queue access - also needs timeout
+    while (1) {
+        if (!worker_running) {
+            // Restore the filled slot before exiting
+            sem_post(sems->filled_slots);
+            return item;
+        }
+        
+        clock_gettime(CLOCK_REALTIME, &ts);
+        ts.tv_sec += 1;
+        
+        int ret = sem_timedwait(sems->queue_mutex, &ts);
+        if (ret == 0) {
+            break;
+        }
+        
+        if (errno == ETIMEDOUT || errno == EINTR) {
+            if (!worker_running) {
+                sem_post(sems->filled_slots);
+                return item;
+            }
+            continue;
+        }
+        
+        perror("sem_timedwait(queue_mutex)");
         sem_post(sems->filled_slots);
         return item;
     }
@@ -229,16 +283,57 @@ static connection_item_t dequeue_connection(shared_data_t* shm, semaphores_t* se
 
 // Re-enqueue a connection item (used when dequeued item is not for this worker)
 static int re_enqueue_connection(shared_data_t* shm, semaphores_t* sems, connection_item_t item) {
-    // Wait for a free slot
-    if (sem_wait(sems->empty_slots) != 0) {
-        perror("sem_wait(empty_slots)");
+    struct timespec ts;
+    
+    // Wait for a free slot with timeout
+    while (1) {
+        if (!worker_running) {
+            return -1;
+        }
+        
+        clock_gettime(CLOCK_REALTIME, &ts);
+        ts.tv_sec += 1;
+        
+        int ret = sem_timedwait(sems->empty_slots, &ts);
+        if (ret == 0) {
+            break;
+        }
+        
+        if (errno == ETIMEDOUT || errno == EINTR) {
+            if (!worker_running) {
+                return -1;
+            }
+            continue;
+        }
+        
+        perror("sem_timedwait(empty_slots)");
         return -1;
     }
 
-    // Critical section for queue access
-    if (sem_wait(sems->queue_mutex) != 0) {
-        perror("sem_wait(queue_mutex)");
-        // Restore the free slot in case of failure
+    // Critical section for queue access with timeout
+    while (1) {
+        if (!worker_running) {
+            sem_post(sems->empty_slots);
+            return -1;
+        }
+        
+        clock_gettime(CLOCK_REALTIME, &ts);
+        ts.tv_sec += 1;
+        
+        int ret = sem_timedwait(sems->queue_mutex, &ts);
+        if (ret == 0) {
+            break;
+        }
+        
+        if (errno == ETIMEDOUT || errno == EINTR) {
+            if (!worker_running) {
+                sem_post(sems->empty_slots);
+                return -1;
+            }
+            continue;
+        }
+        
+        perror("sem_timedwait(queue_mutex)");
         sem_post(sems->empty_slots);
         return -1;
     }
@@ -311,7 +406,14 @@ void worker_main(shared_data_t* shm, semaphores_t* sems, int worker_id, int chan
         // This connection is for this worker, now receive the FD via UNIX socket
         int client_fd = recv_fd(channel_fd);
 
-        // Error handling
+        // Handle return values from recv_fd:
+        // -2 = timeout (continue loop to check worker_running)
+        // -1 = error or signal (check worker_running)
+        // >= 0 = valid fd
+        if (client_fd == -2) {
+            // Timeout - continue to check worker_running
+            continue;
+        }
         if (client_fd < 0) {
             if (!worker_running) break; // shutdown: exit gracefully
             // On error (but not shutdown), continue trying

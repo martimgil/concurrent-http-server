@@ -326,11 +326,31 @@ int main(int argc, char* argv[]) {
 
     // ---------------------------------------------------------------------------------------------------------------
     // 2) Signal handlers (CTRL+C, kill, SIGCHLD for zombies, SIGPIPE for broken pipes)
+    // Use sigaction WITHOUT SA_RESTART so that accept() returns EINTR when signal is received
     // ---------------------------------------------------------------------------------------------------------------
-    signal(SIGINT,  master_signal_handler); // Handle CTRL+C
-    signal(SIGTERM, master_signal_handler); // Handle termination signal
-    signal(SIGCHLD, sigchld_handler);       // Handle child process termination (reap zombies)
-    signal(SIGPIPE, SIG_IGN);               // Ignore broken pipe signals
+    struct sigaction sa_term, sa_chld, sa_pipe;
+    
+    // SIGINT and SIGTERM handlers (must NOT restart syscalls)
+    memset(&sa_term, 0, sizeof(sa_term));
+    sa_term.sa_handler = master_signal_handler;
+    sigemptyset(&sa_term.sa_mask);
+    sa_term.sa_flags = 0;  // NO SA_RESTART - accept() will return EINTR
+    sigaction(SIGINT, &sa_term, NULL);
+    sigaction(SIGTERM, &sa_term, NULL);
+    
+    // SIGCHLD handler for reaping zombies
+    memset(&sa_chld, 0, sizeof(sa_chld));
+    sa_chld.sa_handler = sigchld_handler;
+    sigemptyset(&sa_chld.sa_mask);
+    sa_chld.sa_flags = SA_RESTART | SA_NOCLDSTOP;  // Can restart, we don't want spurious wakeups
+    sigaction(SIGCHLD, &sa_chld, NULL);
+    
+    // Ignore SIGPIPE
+    memset(&sa_pipe, 0, sizeof(sa_pipe));
+    sa_pipe.sa_handler = SIG_IGN;
+    sigemptyset(&sa_pipe.sa_mask);
+    sa_pipe.sa_flags = 0;
+    sigaction(SIGPIPE, &sa_pipe, NULL);
 
     // ---------------------------------------------------------------------------------------------------------------
     // 3) Shared memory and semaphores
