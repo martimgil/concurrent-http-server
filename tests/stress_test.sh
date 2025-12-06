@@ -62,7 +62,10 @@ echo "This will take approximately 5 minutes. Please wait..."
 echo ""
 
 # Run the extended load test
-OUTPUT=$(ab -t 300 -c 50 -r -k "$BASE_URL/index.html" 2>&1)
+# -n 10000000: very high request limit so time is the limiting factor
+# -t 300: 5 minutes (300 seconds)
+# -c 50: 50 concurrent connections
+OUTPUT=$(ab -n 10000000 -t 300 -c 50 -r -k "$BASE_URL/index.html" 2>&1)
 
 # Parse results
 FAILED_REQS=$(echo "$OUTPUT" | grep "Failed requests:" | awk '{print $3}')
