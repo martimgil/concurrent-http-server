@@ -33,8 +33,8 @@
     \large Multi-Threaded Web Server with IPC and Semaphores
 }
 \author{
-    [Student Name 1] (ID: [XXXXX]) \\
-    [Student Name 2] (ID: [YYYYY]) \\
+    Martim Gil (ID: [XXXXX]) \\
+    Nuno Leite Faria (ID: 112994) \\
     \textit{Operating Systems - University of Aveiro}
 }
 \date{\today}
@@ -42,9 +42,16 @@
 \begin{document}
 
 \maketitle
-\abstract{
-    This report describes the implementation of a concurrent web server in C, utilizing a multi-process and multi-thread architecture. The system implements complex synchronization mechanisms (POSIX semaphores, mutexes, condition variables) and inter-process communication via shared memory. Technical details of each module, major concurrency challenges faced, and a quantitative performance analysis under load are presented.
-}
+\begin{abstract}
+    This document outlines the creation and execution of a concurrent HTTP server built in C for the Operating Systems course at the University of Aveiro.
+
+The primary purpose of the project was to create a system that could effectively manage numerous client requests at the same time using a combined process–thread architecture.
+
+The system incorporates sophisticated synchronization and interprocess communication methods, specifically POSIX semaphores and shared memory, guaranteeing consistency and mutual exclusion during access to shared resources. Extra modules were added for safe concurrent logging, file caching, and live statistics tracking.
+
+The suggested solution underwent an extensive array of functional, concurrency, and stress evaluations. The results obtained show the reliability, scalability, and accuracy of the synchronization mechanisms, along with the consistent performance of the system under high workloads
+
+\end{abstract}
 
 \tableofcontents
 \newpage
@@ -53,24 +60,145 @@
 % 1. Introduction
 % ----------------------------------------------------------------------
 \section{Introduction}
-% Brief context of the project.
-% Objectives: Create a robust and concurrent HTTP/1.1 server.
-% Summary of chosen approach (Master-Worker).
+
+Creating concurrent servers is among the most effective and demonstrative uses of synchronization, inter-process communication, and thread management concepts explored in operating systems.
+
+This project focused on creating and deploying a straightforward yet effective HTTP server that can handle multiple concurrent client requests simultaneously.
+
+The C programming language was used for the system's implementation, utilizing POSIX system calls for thread creation and synchronization, semaphore management, shared memory management, and inter-process communication. The structure adopts a modular design to guarantee the maintainability and extensibility of various system elements
+
 
 % ----------------------------------------------------------------------
 % 2. Implementation Details
 % ----------------------------------------------------------------------
 \section{Implementation Details}
-% Describe "HOW" you built it. Base this on src/*.c files.
+
+The concurrent web server was implemented entirely in the C programming language using POSIX system calls for process management, thread creation, synchronization, and interprocess communication (IPC).  
+
+The implementation follows a modular architecture in which each subsystem corresponds to a dedicated source file or pair of header and implementation files under the \texttt{src/} directory.  
+
+This structure promotes reusability, maintainability, and clear separation of concerns between the networking layer, synchronization mechanisms, and data management components.
+
+The Diagram below shows the structure
+
+
+\begin{verbatim}
+concurrent-http-server/
+├── .gitignore
+├── Makefile
+├── README.md
+├── server.conf
+├── server.log
+├── access.log
+│
+│
+├── docs/
+│   ├── design/                    → LaTeX design document
+│   ├── report/                    → Technical report (LaTeX + PDF)
+│   ├── user_manual/               → End-user manual
+|
+├── enunciados/                    → The Documentation given as the guidelines of the project
+│
+├── src/                           → All C source code (core of the system)
+│   ├── cache.c / cache.h
+│   ├── config.c / config.h
+│   ├── http_builder.c / http_builder.h
+│   ├── http_parser.c / http_parser.h
+│   ├── logger.c / logger.h
+│   ├── master.c
+│   ├── semaphores.c / semaphores.h
+│   ├── shared_mem.c / shared_mem.h
+│   ├── stats.c / stats.h
+│   ├── stats_reader.c
+│   ├── thread_logger.c
+│   ├── thread_pool.c / thread_pool.h
+│   ├── worker.c / worker.h
+│
+├── tests/                         → Automated and manual testing scripts
+│   ├── README.md
+│   ├── stress_test.sh
+│   ├── test_cache
+│   ├── test_concurrent.c
+│   ├── test_load.sh
+│   └── test_suite.sh
+│
+├── www/                           → Static web content served by the HTTP server
+│   ├── index.html
+│   ├── style.css
+│   ├── script.js
+│   ├── script.ts
+│   ├── image.png
+│   ├── doc.pdf
+│   └── errors/
+│       ├── 404.html
+│       └── 500.html
+│
+└── bin/                           → Generated during compilation of makefile
+    └── server (compiled binary, created by Makefile)
+    
+\end{verbatim}
+
 
 \subsection{System Architecture}
-% Detailed description of startup (forks) and shared memory structure.
-% Reference: src/master.c, src/shared_mem.c
+
+At a high level, the project consists of three main execution entities: the \textbf{master process}, the \textbf{worker threads}, and the \textbf{auxiliary tools}.  
+The master process is responsible for system initialization, socket setup, configuration parsing, and coordination of shared resources.  
+Each worker thread, managed by a thread pool, handles an individual client connection.  
+Auxiliary programs, such as \texttt{stats\_reader}, access the server's shared memory region to retrieve runtime statistics without interfering with normal operation.
+
+The core modules are summarized below:
+
+\begin{itemize}
+  \item \textbf{master.c} – Initializes the system, loads configuration parameters, creates synchronization primitives, and launches the listening socket. It also spawns the thread pool and dispatches incoming connections.
+  \item \textbf{worker.c / worker.h} – Implements the logic executed by each worker thread. It reads HTTP requests, interacts with the cache and statistics modules, and builds HTTP responses.
+  \item \textbf{thread\_pool.c / .h} – Manages a fixed number of worker threads and a queue of pending tasks. This module is responsible for dynamic workload distribution and concurrency control.
+  \item \textbf{cache.c / .h} – Provides an in-memory file cache to reduce disk I/O. Cached entries are protected by semaphores to ensure mutual exclusion.
+  \item \textbf{logger.c / .h} and \textbf{thread\_logger.c} – Implement thread-safe logging using semaphores to serialize write operations to the log file.
+  \item \textbf{stats.c / .h} and \textbf{shared\_mem.c / .h} – Manage global statistics (requests, bytes, cache hits) stored in a POSIX shared memory region accessible from the external reader program.
+  \item \textbf{semaphores.c / .h} – Encapsulates POSIX semaphore operations (\texttt{sem\_open}, \texttt{sem\_wait}, \texttt{sem\_post}, etc.) to provide a clean synchronization interface.
+  \item \textbf{http\_parser.c / .h} and \textbf{http\_builder.c / .h} – Handle HTTP protocol parsing and response construction.
+  \item \textbf{config.c / .h} – Loads server parameters such as port, document root, cache size, and number of threads from \texttt{server.conf}.
+\end{itemize}
 
 \subsection{Process and Thread Management}
-% Explain Worker and Thread Pool logic.
-% How threads are created and wait for work (Condition Variables).
-% Reference: src/worker.c, src/thread_pool.c
+The concurrent HTTP server follows a hybrid process--thread architecture that separates the acceptance of client connections from the handling of individual requests.  
+The \texttt{master} process is responsible for system initialization, resource allocation, and the creation of a fixed-size thread pool.  
+This approach avoids the overhead associated with creating and destroying threads on demand while allowing high levels of concurrency and efficient resource utilization.
+
+Once the server is initialized, the \texttt{master} process enters a blocking loop where it accepts incoming TCP connections through the listening socket.  
+For each accepted connection, the corresponding file descriptor is packaged as a task and submitted to the thread pool by invoking the function \texttt{thread\_pool\_add\_task()}.  
+This mechanism decouples the acceptance of connections from their processing, ensuring that the server remains responsive even under high connection rates.
+
+\paragraph{Thread Pool Initialization.}
+The thread pool, implemented in \texttt{src/thread\_pool.c}, is initialized with a fixed number of worker threads determined by the configuration file (\texttt{server.conf}).  
+Each thread is created at startup using the POSIX \texttt{pthread\_create()} function and executes a continuous loop defined in the \texttt{thread\_worker()} routine.  
+At initialization, all threads enter a waiting state, blocked on a condition variable until new work becomes available in the shared task queue.
+
+\paragraph{Task Scheduling.}
+Tasks are stored in a synchronized queue protected by a mutex.  
+When the master process enqueues a new connection, it locks the queue, inserts the socket descriptor, and signals one of the waiting threads using \texttt{pthread\_cond\_signal()}.  
+Upon receiving the signal, a worker thread wakes up, retrieves the pending task, releases the mutex, and begins processing the connection.  
+If no tasks are available, threads remain blocked on the condition variable, consuming no CPU resources.
+
+\paragraph{Worker Thread Execution.}
+Each worker thread, implemented in \texttt{src/worker.c}, is responsible for handling a single HTTP transaction.  
+The execution workflow is as follows:
+\begin{enumerate}
+  \item Read the HTTP request from the assigned socket descriptor.
+  \item Parse the request using the \texttt{http\_parser} module to extract the method, path, and headers.
+  \item Verify whether the requested resource is available in the cache. If not, retrieve it from disk and insert it into the cache.
+  \item Build the HTTP response using the \texttt{http\_builder} module and send it back to the client.
+  \item Update the shared statistics in memory (e.g., total requests, cache hits/misses) and append an entry to the thread-safe log.
+\end{enumerate}
+
+This design allows multiple worker threads to operate concurrently on separate connections while ensuring that access to shared resources---such as the cache, statistics counters, and log files---remains synchronized through semaphores and mutexes.
+
+\paragraph{Synchronization and Graceful Shutdown.}
+The use of condition variables guarantees efficient coordination between the master process and worker threads.  
+During server shutdown, the master process sets a global termination flag and signals all condition variables, allowing blocked threads to exit their waiting loops.  
+Each thread is then joined using \texttt{pthread\_join()}, ensuring a clean and orderly release of all allocated resources.
+
+Overall, the process and thread management strategy balances concurrency with control, providing scalable performance while maintaining thread safety and predictability in the server’s behavior.
 
 \subsection{Synchronization and IPC}
 % Detail semaphore implementation.
