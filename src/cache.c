@@ -217,7 +217,7 @@ static void evict_if_needed(file_cache_t *c) {
         cache_entry_t *e = c->lru_tail;  // Start from least recent
 
         while (e && e->refcnt > 0){ 
-            e = e->prev // Find one not in use
+            e = e->prev; // Find one not in use
         };  
 
         if (!e){
