@@ -79,64 +79,60 @@ The implementation follows a modular architecture in which each subsystem corres
 
 This structure promotes reusability, maintainability, and clear separation of concerns between the networking layer, synchronization mechanisms, and data management components.
 
-The Diagram below shows the structure
+The Diagram below shows the structure:
 
-
-\begin{verbatim}
-concurrent-http-server/
-├── .gitignore
-├── Makefile
-├── README.md
-├── server.conf
-├── server.log
-├── access.log
-│
-│
-├── docs/
-│   ├── design/                    → LaTeX design document
-│   ├── report/                    → Technical report (LaTeX + PDF)
-│   ├── user_manual/               → End-user manual
-│
-├── enunciados/                    → The Documentation given as the guidelines of the project
-│
-├── src/                           → All C source code (core of the system)
-│   ├── cache.c / cache.h
-│   ├── config.c / config.h
-│   ├── http_builder.c / http_builder.h
-│   ├── http_parser.c / http_parser.h
-│   ├── logger.c / logger.h
-│   ├── master.c
-│   ├── semaphores.c / semaphores.h
-│   ├── shared_mem.c / shared_mem.h
-│   ├── stats.c / stats.h
-│   ├── stats_reader.c
-│   ├── thread_logger.c
-│   ├── thread_pool.c / thread_pool.h
-│   ├── worker.c / worker.h
-│
-├── tests/                         → Automated and manual testing scripts
-│   ├── README.md
-│   ├── stress_test.sh
-│   ├── test_cache
-│   ├── test_concurrent.c
-│   ├── test_load.sh
-│   └── test_suite.sh
-│
-├── www/                           → Static web content served by the HTTP server
-│   ├── index.html
-│   ├── style.css
-│   ├── script.js
-│   ├── script.ts
-│   ├── image.png
-│   ├── doc.pdf
-│   └── errors/
-│       ├── 404.html
-│       └── 500.html
-│
-└── bin/                           → Generated during compilation of makefile
-    └── server (compiled binary, created by Makefile)
-    
-\end{verbatim}
+\begin{itemize}
+  \item \textbf{concurrent-http-server/} (root directory)
+  \begin{itemize}
+    \item .gitignore
+    \item Makefile
+    \item README.md
+    \item server.conf
+    \item server.log, access.log
+    \item \textbf{docs/} - Documentation and reports
+    \begin{itemize}
+      \item design/ - LaTeX design document
+      \item report/ - Technical report (LaTeX + PDF)
+      \item user\_manual/ - End-user manual
+    \end{itemize}
+    \item \textbf{enunciados/} - Documentation given as project guidelines
+    \item \textbf{src/} - All C source code (core of the system)
+    \begin{itemize}
+      \item cache.c, cache.h
+      \item config.c, config.h
+      \item http\_builder.c, http\_builder.h
+      \item http\_parser.c, http\_parser.h
+      \item logger.c, logger.h
+      \item master.c
+      \item semaphores.c, semaphores.h
+      \item shared\_mem.c, shared\_mem.h
+      \item stats.c, stats.h
+      \item stats\_reader.c
+      \item thread\_logger.c
+      \item thread\_pool.c, thread\_pool.h
+      \item worker.c, worker.h
+    \end{itemize}
+    \item \textbf{tests/} - Automated and manual testing scripts
+    \begin{itemize}
+      \item README.md
+      \item stress\_test.sh
+      \item test\_cache
+      \item test\_concurrent.c
+      \item test\_load.sh
+      \item test\_suite.sh
+    \end{itemize}
+    \item \textbf{www/} - Static web content served by the HTTP server
+    \begin{itemize}
+      \item index.html, style.css, script.js, script.ts
+      \item image.png, doc.pdf
+      \item errors/ - Error pages (404.html, 500.html)
+    \end{itemize}
+    \item \textbf{bin/} - Generated during compilation (created by Makefile)
+    \begin{itemize}
+      \item webserver (compiled binary)
+    \end{itemize}
+  \end{itemize}
+\end{itemize}
 
 
 \subsection{System Architecture}

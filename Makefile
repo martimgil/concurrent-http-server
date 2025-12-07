@@ -53,6 +53,7 @@ $(BIN_DIR)/stats_reader: $(SRC_DIR)/stats_reader.c $(BUILD_DIR)/shared_mem.o
 
 # Compile source files to object files (deps auto-geradas por -MMD -MP)
 $(BUILD_DIR)/%.o: $(SRC_DIR)/%.c
+	@mkdir -p $(BUILD_DIR)
 	@echo "Compiling $<..."
 	$(CC) $(CFLAGS) -c $< -o $@
 
