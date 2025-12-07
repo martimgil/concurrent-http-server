@@ -465,6 +465,14 @@ int main(int argc, char* argv[]) {
             // The worker does not need the listen_fd
             close(listen_fd);
 
+            // Free inherited allocations from parent (not needed in worker)
+            // Close any parent_end channels inherited from earlier loop iterations
+            for (int k = 0; k < i; ++k) {
+                close(parent_end[k]);
+            }
+            free(pids);
+            free(parent_end);
+
             // Initialize worker resources (e.g., per-worker cache)
             worker_init_resources(&config);
 

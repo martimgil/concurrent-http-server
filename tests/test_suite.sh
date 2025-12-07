@@ -51,26 +51,34 @@ setup_server() {
 
     # Compile based on mode
     if [ "$RACE_DETECTOR_MODE" = "tsan" ]; then
+
         echo -e "${BOLD}Compiling with Thread Sanitizer (TSan)...${NC}"
         make clean >/dev/null 2>&1
         make tsan >/dev/null 2>&1
         # Disable ASLR for TSan to avoid memory mapping issues
         SERVER_CMD="setarch $(uname -m) -R ./bin/webserver"
+
     elif [ "$RACE_DETECTOR_MODE" = "helgrind" ]; then
+
         echo "Compiling normally..."
         make clean >/dev/null 2>&1
         make >/dev/null 2>&1
         SERVER_CMD="valgrind --tool=helgrind ./bin/webserver"
+
     elif [ "$RACE_DETECTOR_MODE" = "memcheck" ]; then
+
         echo -e "${BOLD}Compiling for memory leak detection (Valgrind memcheck)...${NC}"
         make clean >/dev/null 2>&1
         make >/dev/null 2>&1
         SERVER_CMD="valgrind --leak-check=full --show-leak-kinds=all --track-origins=yes --log-file=valgrind_memcheck.log ./bin/webserver"
+
     else
+
         echo "Compiling normally..."
         make clean >/dev/null 2>&1
         make >/dev/null 2>&1
         SERVER_CMD="./bin/webserver"
+
     fi
 
     # Create test files
@@ -186,6 +194,7 @@ run_functional_tests() {
     # Test GET / serves index.html content
     ROOT_CONTENT=$(curl -s "$BASE_URL/")
     INDEX_CONTENT=$(curl -s "$BASE_URL/index.html")
+
     if [ "$ROOT_CONTENT" = "$INDEX_CONTENT" ]; then
         print_pass "GET / serves the same content as /index.html"
     else
@@ -205,6 +214,7 @@ run_functional_tests() {
         FILE=$1
         EXPECTED_MIME=$2
         MIME_TYPE=$(curl -s -I "$BASE_URL/$FILE" | grep -i "content-type" | awk '{print $2}' | tr -d '\r')
+
         if [ "$MIME_TYPE" = "$EXPECTED_MIME" ]; then
             print_pass "MIME type for $FILE is $EXPECTED_MIME"
         else
@@ -240,6 +250,7 @@ run_load_tests() {
 
     OUTPUT=$(ab -n $TOTAL_REQS -c $CONCURRENCY -s $TIMEOUT -r -k "$BASE_URL/index.html" 2>&1)
     FAILED_REQS=$(echo "$OUTPUT" | grep "Failed requests:" | awk '{print $3}')
+
     if [ -z "$FAILED_REQS" ]; then FAILED_REQS=0; fi
 
     if [ "$FAILED_REQS" -eq 0 ]; then
@@ -331,7 +342,7 @@ fi
 }
 
 run_memcheck_analysis() {
-    print_header "Memory Leak Analysis (Valgrind memcheck) - Req. 22"
+    print_header "Memory Leak Analysis (Valgrind memcheck)"
 
     if [ "$RACE_DETECTOR_MODE" != "memcheck" ]; then
         print_pass "Memory leak analysis skipped (only runs in memcheck mode)"
@@ -498,7 +509,7 @@ run_queue_full_test() {
     if [ "$HTTP_CODE" -eq 503 ]; then
         print_pass "Server returned 503 Service Unavailable when queue full"
     else
-        # This is informational - the 503 logic IS implemented but hard to trigger
+        # The 503 logic is implemented but hard to trigger
         echo "Note: Server returned $HTTP_CODE - queue was not fully saturated"
         echo "The 503 rejection logic is implemented in master.c (verified by code review)"
         print_pass "Queue rejection test completed (503 logic verified in code)"
@@ -725,7 +736,7 @@ run_tests_for_mode() {
     # Test Queue Full 503
     run_queue_full_test
     
-    # Test graceful shutdown under load (Req. 23)
+    # Test graceful shutdown under load
     # Save the current server PID before the test
     SAVED_SERVER_PID=$SERVER_PID
     run_graceful_shutdown_test
@@ -791,9 +802,9 @@ run_tests_for_mode() {
          print_pass "Statistics accuracy test skipped (not available in instrumented mode)"
     fi
 
-    # Verify log file integrity - Req. 18
+    # Verify log file integrity
     # Note: HTTP access logs go to access.log (from server.conf), not server.log (stdout)
-    print_header "Verifying Log File Integrity (No Interleaved Entries) - Req. 18"
+    print_header "Verifying Log File Integrity (No Interleaved Entries)"
     if [ -f "access.log" ]; then
         LINE_COUNT=$(wc -l < access.log)
         echo "Access log file has $LINE_COUNT entries"
@@ -802,9 +813,6 @@ run_tests_for_mode() {
             echo "Access log is empty (no requests logged yet)"
             print_pass "Log file integrity check passed (empty log)"
         else
-            # Validate log line format:
-            # Expected: IP [timestamp] "METHOD PATH" STATUS BYTES DURATIONms
-            # Example: 127.0.0.1 [05/Dec/2025:23:30:00] "GET /index.html" 200 1234 5ms
             
             # Count lines that DON'T match the expected format (using wc -l for reliability)
             MALFORMED=$(grep -vE '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+[[:space:]]+\[.+\][[:space:]]+".+"[[:space:]]+[0-9]+[[:space:]]+[0-9]+[[:space:]]+[0-9]+ms$' access.log 2>/dev/null | wc -l | tr -d '[:space:]')
