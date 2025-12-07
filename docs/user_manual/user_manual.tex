@@ -31,8 +31,8 @@
     \large Concurrent HTTP Web Server
 }
 \author{
-    [Student Name 1] (ID: [XXXXX]) \\
-    [Student Name 2] (ID: [YYYYY]) \\
+    Martim Gil (ID: [XXXXX]) \\
+    Nuno Leite Faria (ID: [112994]) \\
     \textit{Operating Systems - University of Aveiro}
 }
 \date{\today}
@@ -47,65 +47,287 @@
 % 1. INTRODUCTION
 % =================================================================
 \section{Introduction}
-This manual provides instructions for compiling, configuring, and operating the concurrent web server developed for the Operating Systems course. The server supports HTTP/1.1 requests, multi-process and multi-thread architecture, and shared memory statistics.
+This user manual provides guidance for installing, configuring, and operating the Concurrent HTTP Server developed for the Operating Systems coursework at the University of Aveiro.  
+The system is designed as a lightweight, multi-threaded web server capable of handling multiple simultaneous client connections efficiently while ensuring synchronization, reliability, and safe resource management.
 
+The primary objective of the Concurrent HTTP Server is to deliver static web content—such as HTML pages, CSS stylesheets, and multimedia files—directly from the local \texttt{www/} directory to connected clients via the HTTP/1.0 protocol.  
+Internally, the server employs a hybrid process–thread model that combines interprocess communication (IPC), shared memory statistics tracking, and a thread pool for request handling.  
+This design allows the server to maintain high throughput and responsiveness under concurrent workloads without compromising stability.
+
+The manual is intended for end users, system administrators, and evaluators who wish to:
+\begin{itemize}
+  \item Build and launch the server from source code using the provided \texttt{Makefile}.
+  \item Understand the directory structure, configuration files, and runtime behavior.
+  \item Execute standard and stress tests to validate the server’s performance.
+  \item Monitor real-time server statistics and logs through auxiliary utilities.
+\end{itemize}
+
+Each subsequent section of this document describes a specific aspect of system usage, including installation steps, configuration parameters, command-line execution, monitoring, and troubleshooting procedures.  
+Screenshots, sample commands, and expected outputs are provided where appropriate to facilitate smooth deployment and operation.
+
+In summary, this manual serves as a comprehensive reference for both technical and non-technical users to effectively install, operate, and evaluate the concurrent HTTP server in a POSIX-compliant environment.
 % =================================================================
 % 2. SYSTEM REQUIREMENTS
 % =================================================================
 \section{System Requirements}
-To run this server, the environment must meet the following requirements:
+The Concurrent HTTP Server is designed to operate in a POSIX-compliant environment supporting multi-threading and interprocess communication.  
+This section outlines the minimum and recommended system requirements needed to build, execute, and evaluate the application successfully.
+
+\subsection{Hardware Requirements}
+The server is lightweight and optimized for laboratory-scale deployments, requiring only modest computational resources.  
+However, performance under heavy concurrency improves with multi-core processors and sufficient memory allocation.
+
 \begin{itemize}
-    \item \textbf{Operating System:} Linux/Unix (e.g., Ubuntu 20.04 or later).
-    \item \textbf{Compiler:} GCC with C99 support.
-    \item \textbf{Libraries:} \texttt{pthread}, \texttt{rt} (Real-time extensions).
-    \item \textbf{Tools:} \texttt{make}, \texttt{curl}, \texttt{ab} (Apache Bench for testing).
+  \item \textbf{Processor:} Dual-core CPU or higher (recommended: Quad-core).
+  \item \textbf{Memory:} Minimum 512 MB RAM; recommended 2 GB or more for stress testing.
+  \item \textbf{Storage:} At least 100 MB of free disk space for compiled binaries, logs, and cached web content.
+  \item \textbf{Network:} Localhost (loopback) interface or Ethernet connection for HTTP testing.
 \end{itemize}
+
+\subsection{Software Requirements}
+The server and its utilities rely on standard POSIX libraries and tools commonly available on Unix-like operating systems.
+
+\begin{itemize}
+  \item \textbf{Operating System:} Linux (Ubuntu, Fedora, or equivalent) or any POSIX-compliant system (e.g., macOS, FreeBSD).
+  \item \textbf{Compiler:} GCC version 9.0 or higher (tested with GCC 13).
+  \item \textbf{Build System:} GNU \texttt{make} utility for automated compilation and testing.
+  \item \textbf{Threading Support:} POSIX Threads (pthreads) library.
+  \item \textbf{IPC Support:} POSIX Shared Memory (\texttt{shm\_open}) and Semaphores (\texttt{sem\_open}).
+  \item \textbf{Shell Environment:} Bash 4.0+ (for executing test scripts such as \texttt{test\_suite.sh} and \texttt{stress\_test.sh}).
+  \item \textbf{Optional Tools:}
+    \begin{itemize}
+      \item \texttt{curl} — for manual HTTP testing.
+      \item \texttt{ab} (ApacheBench) — for concurrency and performance testing.
+      \item \texttt{valgrind}, \texttt{helgrind}, or \texttt{tsan} — for memory and thread-safety analysis.
+    \end{itemize}
+\end{itemize}
+
+\subsection{Dependencies and Libraries}
+All required dependencies are part of the standard GNU/Linux environment.  
+The following libraries are automatically linked during the build process via the \texttt{Makefile}:
+\begin{itemize}
+  \item \texttt{-pthread} — for thread creation and synchronization.
+  \item \texttt{-lrt} — for POSIX real-time extensions used in shared memory and semaphores.
+  \item \texttt{-lm} — for standard mathematical functions.
+\end{itemize}
+
+\subsection{Test Environment}
+The system was developed and validated on Ubuntu 24.04 LTS (64-bit) with kernel version 6.x and GCC 13.2.0.  
+All functional and concurrency tests were executed locally on both physical and virtualized environments without external dependencies.
+
+\subsection{User Permissions}
+Running the server requires user-level permissions only.  
+Administrator privileges (\texttt{sudo}) are not required unless the user wishes to bind the server to a privileged port (below 1024).  
+For standard operation, the default configuration uses TCP port 8080.
+
+\subsection{Summary}
+The Concurrent HTTP Server can be compiled and executed on virtually any Unix-like system with POSIX support.  
+Its minimal dependency footprint allows it to run efficiently on low-resource machines while remaining fully compatible with modern multicore systems for performance benchmarking.
 
 % =================================================================
 % 3. COMPILATION
 % =================================================================
 \section{Compilation}
-The project uses a \texttt{Makefile} for build automation. Run the following commands from the project root:
+The Concurrent HTTP Server project is built using a GNU \texttt{Makefile} that automates compilation, linking, and testing tasks.  
+The Makefile defines a consistent build process that ensures correct dependency tracking, multi-threaded linkage, and reproducible results across all supported environments.  
+All compilation rules are compatible with POSIX systems using the \texttt{gcc} compiler and the GNU \texttt{make} utility.
+
+\subsection{Build System Overview}
+The Makefile separates source code, build artifacts, and final binaries into dedicated directories:
+\begin{verbatim}
+src/      → C source files and headers
+build/    → Intermediate object (.o) and dependency (.d) files
+bin/      → Final executables (webserver, stats_reader)
+tests/    → Test scripts and utilities
+\end{verbatim}
+
+The compilation process automatically generates dependency files using the compiler flags \texttt{-MMD -MP}, allowing incremental builds to recompile only modified files.  
+POSIX threading and real-time libraries are linked through the flags \texttt{-pthread} and \texttt{-lrt}, ensuring full compatibility with shared memory and semaphore operations.
 
 \subsection{Standard Build}
-To build the production executable \texttt{bin/webserver}:
+To compile the complete project (main server and statistics reader), navigate to the project root and execute:
 \begin{lstlisting}[language=bash]
 make all
 \end{lstlisting}
 
-\subsection{Cleaning}
-To remove object files and old binaries:
+This target performs the following steps:
+\begin{itemize}
+  \item Creates required directories (\texttt{build/} and \texttt{bin/}).
+  \item Compiles all C sources located in \texttt{src/}.
+  \item Links the main server executable \texttt{bin/webserver}.
+  \item Builds the auxiliary utility \texttt{bin/stats\_reader}.
+\end{itemize}
+
+Upon success, both executables are available in the \texttt{bin/} directory:
+\begin{verbatim}
+bin/
+├── webserver      → Main HTTP server binary
+└── stats_reader   → Shared memory monitoring utility
+\end{verbatim}
+
+\subsection{Running the Server}
+Once compiled, the server can be launched directly via the Makefile:
+\begin{lstlisting}[language=bash]
+make run
+\end{lstlisting}
+
+This command builds the project (if necessary) and executes \texttt{./bin/webserver} with default configuration parameters specified in \texttt{server.conf}.
+
+\subsection{Cleaning Build Artifacts}
+To remove all intermediate and binary files, execute:
 \begin{lstlisting}[language=bash]
 make clean
 \end{lstlisting}
+This command deletes the \texttt{build/} and \texttt{bin/} directories, ensuring a clean state for subsequent recompilation or testing.
 
-\subsection{Debug/Test Modes}
+\subsection{Debug and Analysis Builds}
+The Makefile includes predefined targets for debugging and race detection:
+
 \begin{itemize}
-    \item \textbf{Helgrind (Race Detection):} \texttt{make helgrind}
-    \item \textbf{ThreadSanitizer:} \texttt{make tsan}
+  \item \textbf{Debug Mode} — builds the project with extended debug symbols and preprocessor macros:
+        \begin{lstlisting}[language=bash]
+        make debug
+        \end{lstlisting}
+        This enables additional logging and verbose output, suitable for development and inspection via \texttt{gdb} or similar tools.
+
+  \item \textbf{Thread Sanitizer (TSan)} — compiles the project with the GCC/Clang Thread Sanitizer:
+        \begin{lstlisting}[language=bash]
+        make tsan
+        ./bin/webserver
+        \end{lstlisting}
+        This mode detects race conditions and synchronization misuse at runtime.
+
+  \item \textbf{Helgrind (Valgrind Tool)} — while not a separate Make target, race detection can also be run through:
+        \begin{lstlisting}[language=bash]
+        valgrind --tool=helgrind ./bin/webserver
+        \end{lstlisting}
+        This approach identifies data races and lock-order inversions in multithreaded execution.
+
+  \item \textbf{Valgrind Leak Check} — to verify proper resource cleanup:
+        \begin{lstlisting}[language=bash]
+        valgrind --leak-check=full ./bin/webserver
+        \end{lstlisting}
+        confirming that all heap, shared memory, and semaphore allocations are correctly freed upon shutdown.
 \end{itemize}
+
+\subsection{Testing Integration}
+Automated validation is directly integrated into the build system via the following targets:
+\begin{lstlisting}[language=bash]
+make test         # Executes the test suite (tests/test_suite.sh)
+make build-tests  # Compiles test binaries (e.g., test_concurrent.c)
+\end{lstlisting}
+
+The \texttt{make test} target compiles and launches the server before running a collection of automated scripts that verify HTTP compliance, concurrency safety, and log consistency.  
+Additional stress tests can be launched via:
+\begin{lstlisting}[language=bash]
+./tests/stress_test.sh
+\end{lstlisting}
+to evaluate performance under sustained load.
+
+\subsection{Help and Documentation}
+The Makefile provides a built-in help command summarizing all available targets:
+\begin{lstlisting}[language=bash]
+make help
+\end{lstlisting}
+This command lists build, clean, test, and debug options with brief descriptions, ensuring that all project operations can be performed consistently from the command line.
+
+\subsection{Summary}
+The Makefile offers a complete and reproducible build environment for the concurrent HTTP server.  
+It automates every step—from dependency generation and executable linking to race detection and regression testing—thereby guaranteeing consistent behavior, easy debugging, and rapid verification throughout the project’s lifecycle.
+
 
 % =================================================================
 % 4. CONFIGURATION
 % =================================================================
 \section{Configuration}
-The server behavior is controlled by the \texttt{server.conf} file located in the root directory.
+The behavior of the Concurrent HTTP Server is governed by the configuration file \texttt{server.conf}, located in the project root directory.  
+This file defines all runtime parameters, including network settings, concurrency levels, and resource allocation limits.  
+The configuration is parsed at startup by the \texttt{config.c} module, which reads each key–value pair, validates the input, and applies the settings to the master and worker processes.
 
+If the file is missing or a parameter is invalid, the server automatically falls back to default values defined in the source code.  
+Any configuration error or invalid syntax is reported to the console and logged in the main log file.
+
+\subsection{Editing the Configuration File}
+The configuration file uses a simple line-based \texttt{KEY = VALUE} format.  
+Comments are supported using the \texttt{\#} symbol at the start of a line.  
+For example:
+\begin{lstlisting}[language=bash]
+# Example server configuration
+PORT = 8080
+DOCUMENT_ROOT = www
+NUM_WORKERS = 4
+THREADS_PER_WORKER = 10
+MAX_QUEUE_SIZE = 100
+LOG_FILE = logs/server.log
+CACHE_SIZE_MB = 10
+\end{lstlisting}
+
+Blank lines and extra whitespace are ignored.  
+All paths can be specified relative to the project root or as absolute filesystem paths.
+
+\subsection{Configuration Parameters}
 \begin{table}[H]
 \centering
-\begin{tabular}{|l|l|p{7cm}|}
+\begin{tabular}{|l|l|p{8cm}|}
 \hline
 \textbf{Parameter} & \textbf{Example} & \textbf{Description} \\ \hline
-PORT & 8080 & TCP port to listen on. \\ \hline
-DOCUMENT\_ROOT & www & Directory containing static files. \\ \hline
-NUM\_WORKERS & 4 & Number of worker processes to fork. \\ \hline
-THREADS\_PER\_WORKER & 10 & Number of threads per worker. \\ \hline
-MAX\_QUEUE\_SIZE & 100 & Size of the shared request buffer. \\ \hline
-LOG\_FILE & server.log & Path to the access log file. \\ \hline
-CACHE\_SIZE\_MB & 10 & LRU Cache size per worker (in MB). \\ \hline
+\texttt{PORT} & 8080 & TCP port on which the master process listens for incoming HTTP connections. Must be above 1024 for non-root users. \\ \hline
+\texttt{DOCUMENT\_ROOT} & www & Directory containing static web files served to clients (HTML, CSS, images, etc.). \\ \hline
+\texttt{NUM\_WORKERS} & 4 & Number of worker processes forked by the master. Each worker maintains an independent thread pool. \\ \hline
+\texttt{THREADS\_PER\_WORKER} & 10 & Number of threads created within each worker’s thread pool to handle concurrent requests. \\ \hline
+\texttt{MAX\_QUEUE\_SIZE} & 100 & Maximum number of pending client requests in the shared request buffer (bounded queue). \\ \hline
+\texttt{LOG\_FILE} & logs/server.log & Absolute or relative path to the server’s access log file. Log entries are synchronized across all workers using named semaphores. \\ \hline
+\texttt{CACHE\_SIZE\_MB} & 10 & Maximum memory (in MB) allocated for the LRU cache in each worker process. Cached entries are shared across threads within the same worker. \\ \hline
 \end{tabular}
 \caption{Configuration Parameters}
 \end{table}
+
+\subsection{Runtime Behavior}
+When the server starts, the \texttt{master.c} process reads and applies these parameters before spawning worker processes.  
+Each worker initializes its own LRU cache and thread pool according to the configuration values.  
+The \texttt{logger.c} module initializes a shared semaphore-protected log file defined by \texttt{LOG\_FILE}, ensuring non-interleaved writes from multiple threads.
+
+Configuration values such as \texttt{MAX\_QUEUE\_SIZE} and \texttt{CACHE\_SIZE\_MB} directly affect performance and memory footprint.  
+Increasing these parameters can improve throughput but requires more system memory and may impact scheduling latency.
+
+\subsection{Default Values}
+If a parameter is not specified, the server loads default constants defined in \texttt{config.h}:
+\begin{itemize}
+  \item \texttt{PORT = 8080}
+  \item \texttt{DOCUMENT\_ROOT = www}
+  \item \texttt{NUM\_WORKERS = 2}
+  \item \texttt{THREADS\_PER\_WORKER = 4}
+  \item \texttt{MAX\_QUEUE\_SIZE = 50}
+  \item \texttt{LOG\_FILE = logs/server.log}
+  \item \texttt{CACHE\_SIZE\_MB = 5}
+\end{itemize}
+
+These defaults ensure that the server can operate even if the configuration file is missing or incomplete, using safe and conservative values for small-scale deployments.
+
+\subsection{Validation and Error Handling}
+Each configuration parameter is validated at startup:
+\begin{itemize}
+  \item Invalid numeric values (negative or zero) are rejected and replaced with defaults.
+  \item Nonexistent directories in \texttt{DOCUMENT\_ROOT} or \texttt{LOG\_FILE} paths trigger warnings and cause fallback creation.
+  \item Invalid or unknown keys are ignored but reported in the log.
+\end{itemize}
+
+If any critical parameter (such as the listening port) cannot be initialized, the server prints an error message and terminates gracefully.
+
+\subsection{Reloading Configuration}
+Currently, configuration parameters are loaded only at startup.  
+To apply changes, the server must be restarted:
+\begin{lstlisting}[language=bash]
+make run
+# or
+./bin/webserver
+\end{lstlisting}
+
+This approach ensures deterministic initialization and avoids inconsistencies during live configuration updates.
+
+\subsection{Summary}
+The \texttt{server.conf} file provides full control over network, concurrency, logging, and caching behavior.  
+Its human-readable syntax and safe default values make it easy to tune performance for different environments, from lightweight laboratory tests to high-load stress experiments.
 
 % =================================================================
 % 5. EXECUTION
@@ -133,29 +355,384 @@ To stop the server correctly (releasing shared memory and closing sockets):
 % =================================================================
 \section{Usage Examples}
 
+This section provides practical examples of how to interact with the Concurrent HTTP Server once it has been compiled and configured.  
+The examples assume that the server has been started successfully using either:
+\begin{lstlisting}[language=bash]
+make run
+# or
+./bin/webserver
+\end{lstlisting}
+and that it is listening on TCP port 8080 as defined in the configuration file (\texttt{server.conf}).
+
+% ----------------------------------------------------------------------
 \subsection{Basic HTTP Request}
-Using \texttt{curl} to fetch the index page:
+% ----------------------------------------------------------------------
+
+The server delivers static files stored in the directory specified by the \texttt{DOCUMENT\_ROOT} parameter (default: \texttt{www/}).  
+To test the server using the command line, use \texttt{curl} to request a file:
+
 \begin{lstlisting}[language=bash]
 curl -v http://127.0.0.1:8080/index.html
 \end{lstlisting}
 
-\subsection{Checking Statistics}
-The server prints statistics to the standard output every 30 seconds. You can also view the logs:
-\begin{lstlisting}[language=bash]
-tail -f server.log
+The \texttt{-v} flag enables verbose output, displaying HTTP headers and response codes.  
+If the file exists in the \texttt{www/} directory, the server responds with:
+\begin{lstlisting}
+> GET /index.html HTTP/1.0
+< HTTP/1.0 200 OK
+< Content-Type: text/html
+< Content-Length: 512
 \end{lstlisting}
 
+If the file is not found, the server returns the predefined error page:
+\begin{lstlisting}
+< HTTP/1.0 404 Not Found
+< Content-Type: text/html
+< Content-Length: 238
+\end{lstlisting}
+
+To view a list of other available files:
+\begin{lstlisting}[language=bash]
+ls www/
+\end{lstlisting}
+
+---
+
+\subsection{Accessing from a Web Browser}
+After launching the server, open any browser and navigate to:
+\begin{verbatim}
+http://localhost:8080
+\end{verbatim}
+You should see the default landing page (\texttt{index.html}) loaded from the local \texttt{www/} directory.  
+The server will log each access in the file defined by the \texttt{LOG\_FILE} parameter (default: \texttt{logs/server.log}).
+
+---
+
+\subsection{Monitoring Logs}
+All requests and internal events are recorded in the log file.  
+To view logs in real time:
+\begin{lstlisting}[language=bash]
+tail -f logs/server.log
+\end{lstlisting}
+
+Each log entry contains a timestamp, process ID, thread ID, client IP, and the requested resource.  
+Concurrent access from multiple clients is safely synchronized through semaphores, ensuring clean, non-interleaved lines.
+
+---
+
+\subsection{Checking Live Statistics}
+The server maintains real-time statistics on shared memory, including request counts, cache hits, and bytes served.  
+These can be viewed using the monitoring utility:
+\begin{lstlisting}[language=bash]
+./bin/stats_reader
+\end{lstlisting}
+
+Typical output:
+\begin{lstlisting}
+=== Server Statistics ===
+Active Workers: 4
+Total Requests: 512
+Cache Hits: 430
+Cache Misses: 82
+Total Bytes Served: 3.2 MB
+=========================
+\end{lstlisting}
+
+Statistics are refreshed periodically (default: every 30 seconds).  
+If run in a separate terminal, \texttt{stats\_reader} provides a non-intrusive live view of the server’s performance.
+
+---
+
+\subsection{Concurrent Request Example}
+To simulate multiple simultaneous clients, use the Apache Benchmark tool (\texttt{ab}):
+
+\begin{lstlisting}[language=bash]
+ab -n 200 -c 20 http://127.0.0.1:8080/index.html
+\end{lstlisting}
+
+where:
+\begin{itemize}
+  \item \texttt{-n 200} — total number of requests.
+  \item \texttt{-c 20} — number of concurrent clients.
+\end{itemize}
+
+The output displays average latency, throughput, and failed request counts, allowing quick performance evaluation under load.
+
+---
+
+\subsection{Error Handling Verification}
+To test custom error pages:
+\begin{lstlisting}[language=bash]
+curl -v http://127.0.0.1:8080/nonexistent.html
+\end{lstlisting}
+Expected response:
+\begin{lstlisting}
+< HTTP/1.0 404 Not Found
+< Content-Type: text/html
+< Content-Length: 238
+\end{lstlisting}
+
+This confirms that the server correctly maps missing files to the predefined error template located in \texttt{www/errors/404.html}.
+
+---
+
+\subsection{Graceful Shutdown}
+To terminate the server, use:
+\begin{lstlisting}[language=bash]
+Ctrl + C
+\end{lstlisting}
+
+The server handles the \texttt{SIGINT} signal gracefully by:
+\begin{itemize}
+  \item Closing all open sockets.
+  \item Releasing shared memory and semaphores.
+  \item Flushing log buffers to disk.
+\end{itemize}
+After shutdown, you can verify resource cleanup using:
+\begin{lstlisting}[language=bash]
+ipcs -m    # Shared memory segments
+ipcs -s    # Semaphores
+\end{lstlisting}
+No remaining entries should appear under the server’s process user.
+
+---
+
+\subsection{Summary}
+These examples demonstrate how to interact with the Concurrent HTTP Server using standard tools such as \texttt{curl}, \texttt{tail}, and \texttt{ab}.  
+Through its modular configuration and shared memory statistics utilities, the server provides both simplicity for basic use and flexibility for detailed performance evaluation.
 % =================================================================
 % 7. TROUBLESHOOTING
 % =================================================================
 \section{Troubleshooting}
 
+This section lists common issues that may occur during compilation, configuration, or runtime execution of the Concurrent HTTP Server, together with their corresponding causes and recommended solutions.  
+Each problem is derived from real test and validation scenarios observed during the system’s development and evaluation.
+
+\subsection{Compilation Issues}
+
+\paragraph{1. Missing Libraries or Header Files.}
+\textbf{Symptom:}
+\begin{lstlisting}
+fatal error: pthread.h: No such file or directory
+fatal error: semaphore.h: No such file or directory
+\end{lstlisting}
+
+\textbf{Cause:}  
+Required POSIX development libraries (\texttt{libpthread}, \texttt{librt}) are missing.
+
+\textbf{Solution:}  
+Install the development toolchain for POSIX libraries:
+\begin{lstlisting}[language=bash]
+sudo apt-get install build-essential
+sudo apt-get install manpages-posix-dev
+\end{lstlisting}
+Then recompile using:
+\begin{lstlisting}[language=bash]
+make clean && make all
+\end{lstlisting}
+
+\paragraph{2. Undefined Reference Errors at Link Time.}
+\textbf{Symptom:}
+\begin{lstlisting}
+undefined reference to `sem_open' or `shm_open'
+\end{lstlisting}
+
+\textbf{Cause:}  
+The real-time library (\texttt{-lrt}) is not linked properly.
+
+\textbf{Solution:}  
+Ensure the Makefile includes:
+\begin{lstlisting}
+LDFLAGS += -lrt
+\end{lstlisting}
+(Already included by default in this project.)
+
+---
+
+\subsection{Configuration and Startup Issues}
+
+\paragraph{3. “Port Already in Use” Error.}
+\textbf{Symptom:}
+\begin{lstlisting}
+Error: Failed to bind socket on port 8080
+\end{lstlisting}
+
+\textbf{Cause:}  
+Another process (possibly a previous server instance) is already listening on the same port.
+
+\textbf{Solution:}
 \begin{itemize}
-    \item \textbf{Error: Address already in use}
-    \\ \textbf{Solution:} The configured PORT is occupied. Change it in \texttt{server.conf} or kill the process using it.
-    
-    \item \textbf{Error: Shared Memory / Semaphores failed}
-    \\ \textbf{Solution:} If the server crashed previously, old shared memory objects might persist. Delete them from \texttt{/dev/shm/} or restart the PC.
+  \item Terminate any running instance of the server:
+  \begin{lstlisting}[language=bash]
+  sudo lsof -i :8080
+  kill <PID>
+  \end{lstlisting}
+  \item Alternatively, change the port in \texttt{server.conf} to an unused value (e.g., 8081).
 \end{itemize}
+
+---
+
+\paragraph{4. “Permission Denied” on Low Ports.}
+\textbf{Symptom:}
+\begin{lstlisting}
+bind(): Permission denied
+\end{lstlisting}
+
+\textbf{Cause:}  
+Non-root users cannot bind to privileged ports (below 1024).
+
+\textbf{Solution:}  
+Either use a non-privileged port (e.g., 8080) in \texttt{server.conf}, or start the server with elevated privileges:
+\begin{lstlisting}[language=bash]
+sudo ./bin/webserver
+\end{lstlisting}
+
+---
+
+\paragraph{5. Missing or Invalid Document Root.}
+\textbf{Symptom:}
+\begin{lstlisting}
+Error: Failed to open document root directory 'www'
+\end{lstlisting}
+
+\textbf{Cause:}  
+The directory specified by \texttt{DOCUMENT\_ROOT} does not exist.
+
+\textbf{Solution:}  
+Ensure the directory exists and contains at least one valid file:
+\begin{lstlisting}[language=bash]
+mkdir -p www
+echo "<h1>Server is running!</h1>" > www/index.html
+\end{lstlisting}
+
+---
+
+\paragraph{6. Invalid Configuration Entries.}
+\textbf{Symptom:}
+\begin{lstlisting}
+Warning: Invalid line in server.conf: "THREADS_PER_WORKER = -2"
+\end{lstlisting}
+
+\textbf{Cause:}  
+Numeric parameters cannot be negative or zero.
+
+\textbf{Solution:}  
+Edit \texttt{server.conf} to ensure all values are positive integers:
+\begin{lstlisting}[language=bash]
+THREADS_PER_WORKER = 4
+\end{lstlisting}
+
+---
+
+\subsection{Runtime and Concurrency Issues}
+
+\paragraph{7. No Response to HTTP Requests.}
+\textbf{Symptom:}
+\begin{lstlisting}
+curl: (7) Failed to connect to 127.0.0.1 port 8080: Connection refused
+\end{lstlisting}
+
+\textbf{Cause:}  
+The server process is not running, or the master process failed to spawn workers.
+
+\textbf{Solution:}  
+Run the server manually in the foreground to view debug messages:
+\begin{lstlisting}[language=bash]
+make run
+\end{lstlisting}
+Check for errors such as “Failed to fork worker” or “Invalid socket descriptor.”
+
+---
+
+\paragraph{8. Interleaved or Corrupted Logs.}
+\textbf{Symptom:}  
+Multiple log entries overlap in the same line of \texttt{logs/server.log}.
+
+\textbf{Cause:}  
+This may occur if the logging semaphore was removed or not initialized properly.
+
+\textbf{Solution:}
+\begin{lstlisting}[language=bash]
+pkill webserver
+sem_unlink /ws_log_sem
+make run
+\end{lstlisting}
+The \texttt{master.c} process recreates the semaphore on startup.
+
+---
+
+\paragraph{9. Shared Memory Not Released After Shutdown.}
+\textbf{Symptom:}
+\begin{lstlisting}
+ipcs -m
+------ Shared Memory Segments --------
+0x00000000  12345  user  666  4096
+\end{lstlisting}
+
+\textbf{Cause:}  
+The server terminated abnormally (e.g., via \texttt{kill -9}), skipping cleanup routines.
+
+\textbf{Solution:}  
+Manually remove IPC objects:
+\begin{lstlisting}[language=bash]
+ipcrm -m 12345   # Shared memory
+ipcrm -s 54321   # Semaphore
+\end{lstlisting}
+Then restart the server using \texttt{make run}.
+
+---
+
+\paragraph{10. High CPU Usage or Slow Response.}
+\textbf{Cause:}  
+Cache size too small or thread count too low for the incoming request rate.
+
+\textbf{Solution:}  
+Increase \texttt{THREADS\_PER\_WORKER} and \texttt{CACHE\_SIZE\_MB} in \texttt{server.conf}, or reduce concurrency levels during testing:
+\begin{lstlisting}[language=bash]
+ab -n 100 -c 10 http://127.0.0.1:8080/
+\end{lstlisting}
+
+---
+
+\subsection{Testing and Validation Problems}
+
+\paragraph{11. Test Scripts Fail to Execute.}
+\textbf{Symptom:}
+\begin{lstlisting}
+./tests/test_suite.sh: Permission denied
+\end{lstlisting}
+
+\textbf{Cause:}  
+The test scripts are missing execution permissions.
+
+\textbf{Solution:}
+\begin{lstlisting}[language=bash]
+chmod +x tests/*.sh
+make test
+\end{lstlisting}
+
+---
+
+\paragraph{12. Stress Test Hangs Indefinitely.}
+\textbf{Cause:}  
+Thread pool exhaustion or blocked request queue due to oversized \texttt{MAX\_QUEUE\_SIZE} and insufficient consumer threads.
+
+\textbf{Solution:}
+\begin{itemize}
+  \item Decrease \texttt{MAX\_QUEUE\_SIZE} to balance producer–consumer throughput.
+  \item Monitor shared memory statistics using \texttt{./bin/stats\_reader}.
+\end{itemize}
+
+---
+
+\subsection{Summary}
+Most runtime issues are caused by incorrect configuration values, missing directories, or improperly terminated processes.  
+The server is designed to handle errors gracefully and report them clearly through both console output and the log file.  
+If persistent problems occur, enable debug mode for additional diagnostic information:
+\begin{lstlisting}[language=bash]
+make debug
+./bin/webserver
+\end{lstlisting}
+This mode provides detailed trace logs that can help identify configuration or synchronization errors during runtime.
 
 \end{document}
