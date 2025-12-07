@@ -96,7 +96,7 @@ concurrent-http-server/
 │   ├── design/                    → LaTeX design document
 │   ├── report/                    → Technical report (LaTeX + PDF)
 │   ├── user_manual/               → End-user manual
-|
+│
 ├── enunciados/                    → The Documentation given as the guidelines of the project
 │
 ├── src/                           → All C source code (core of the system)
@@ -175,23 +175,22 @@ Each thread is created at startup using the POSIX \texttt{pthread\_create()} fun
 At initialization, all threads enter a waiting state, blocked on a condition variable until new work becomes available in the shared task queue.
 
 \paragraph{Task Scheduling.}
-Tasks are stored in a synchronized queue protected by a mutex.  
-When the master process enqueues a new connection, it locks the queue, inserts the socket descriptor, and signals one of the waiting threads using \texttt{pthread\_cond\_signal()}.  
-Upon receiving the signal, a worker thread wakes up, retrieves the pending task, releases the mutex, and begins processing the connection.  
-If no tasks are available, threads remain blocked on the condition variable, consuming no CPU resources.
+
+Tasks are kept in a synchronized queue secured by a mutex. When the master process adds a new connection to the queue, it secures the queue and places the socket descriptor, and notifies one of the waiting threads by calling \texttt{pthread\_cond\_signal()}.
+When the signal is received, a worker thread activates, fetches the outstanding task, and frees the mutex, and starts handling the connection. If there are no tasks present, threads stay idle, blocked on the condition variable, using no CPU resources.
+
 
 \paragraph{Worker Thread Execution.}
-Each worker thread, implemented in \texttt{src/worker.c}, is responsible for handling a single HTTP transaction.  
-The execution workflow is as follows:
+Every worker thread, found in \texttt{src/worker.c}, is accountable for managing an individual HTTP transaction. The workflow for execution is outlined as follows:
 \begin{enumerate}
-  \item Read the HTTP request from the assigned socket descriptor.
-  \item Parse the request using the \texttt{http\_parser} module to extract the method, path, and headers.
-  \item Verify whether the requested resource is available in the cache. If not, retrieve it from disk and insert it into the cache.
-  \item Build the HTTP response using the \texttt{http\_builder} module and send it back to the client.
-  \item Update the shared statistics in memory (e.g., total requests, cache hits/misses) and append an entry to the thread-safe log.
+  \item Obtain the HTTP request from the designated socket descriptor.
+  \item Analyze the request with the \texttt{http\_parser} module to obtain the method, path, and headings.
+  \item heck if the requested resource is present in the cache. If it isn't available, get it back from the disk and place it into the cache.
+  \item Construct the HTTP response utilizing the \texttt{http\_builder} module and return it to the client.
+  \item URevise the common statistics stored in memory (e.g., total requests, cache hits/misses) and add an entry to the log that is safe for concurrent access.
 \end{enumerate}
 
-This design allows multiple worker threads to operate concurrently on separate connections while ensuring that access to shared resources---such as the cache, statistics counters, and log files---remains synchronized through semaphores and mutexes.
+This structure enables several worker threads to function simultaneously on distinct connections while guaranteeing that access to common resources like the cache, statistics counters, and log files—stays coordinated through semaphores and mutexes
 
 \paragraph{Synchronization and Graceful Shutdown.}
 The use of condition variables guarantees efficient coordination between the master process and worker threads.  
@@ -206,11 +205,101 @@ Overall, the process and thread management strategy balances concurrency with co
 % - Statistics Protection (Atomicity).
 % - Shared Log (File Mutual Exclusion).
 % Reference: src/semaphores.c
+To guarantee secure and predictable operation in a multithreaded setting, the server implements incorporates a variety of synchronization methods utilizing POSIX semaphores, mutexes, and shared memory. These systems safeguard common resources like the task queue, the cache, the worldwide data, and the log file. Every synchronization primitive is abstracted. via the \texttt{src/semaphores.c} module, which offers a straightforward interface for creation, access, and removal of specified semaphores among processes
+
+
+
+\paragraph{Semaphore Abstraction.}
+The semaphore subsystem encapsulates the POSIX API functions \texttt{sem\_open()}, \texttt{sem\_wait()}, \texttt{sem\_post()}, and \texttt{sem\_unlink()}, offering higher-level operations such as \texttt{semCreate()}, \texttt{semConnect()}, \texttt{semDown()}, and \texttt{semUp()}.  
+Each named semaphore is initialized with an appropriate initial value depending on its purpose (e.g., binary for mutual exclusion, counting for producer--consumer synchronization).  
+This modular abstraction ensures that other components---such as logging, statistics, and caching---can remain independent of low-level synchronization details.
+
+\paragraph{Producer--Consumer Coordination.}
+The interaction between the master process and the worker threads follows a classical producer--consumer model.  
+The master acts as the producer by inserting new tasks (socket descriptors) into a shared circular buffer implemented in the thread pool, while the workers act as consumers by retrieving and processing these tasks.  
+Access to the buffer is controlled by two semaphores:
+\begin{itemize}
+  \item A \emph{counting semaphore} representing the number of available tasks.
+  \item A \emph{binary semaphore} (mutex) protecting concurrent access to the queue structure itself.
+\end{itemize}
+This design guarantees that threads safely add and remove tasks without race conditions or data corruption, even under high concurrency.
+
+\paragraph{Shared Statistics and Atomicity.}
+Global runtime metrics---including total requests served, bytes transmitted, and cache hit/miss counters---are stored in a POSIX shared memory region managed by \texttt{src/shared\_mem.c}.  
+To prevent inconsistent updates when multiple threads increment or modify these counters simultaneously, all accesses are wrapped in critical sections protected by binary semaphores.  
+This ensures atomicity of operations such as:
+\begin{verbatim}
+stats.requests++;
+stats.bytes_sent += response_size;
+\end{verbatim}
+The external utility \texttt{stats\_reader} connects to the same shared memory object and can safely read these values in real time without interfering with the server’s internal operations.
+
+\paragraph{Mutual Exclusion in Shared Logging.}
+Logging operations, implemented in \texttt{src/logger.c} and \texttt{src/thread\_logger.c}, are performed concurrently by multiple worker threads.  
+To prevent simultaneous writes that could corrupt the log file, a named binary semaphore ensures exclusive access to the output stream.  
+When a thread intends to log an event, it performs a \texttt{semDown()} operation before writing and a \texttt{semUp()} afterward, effectively serializing log entries across all threads.
+
+\paragraph{Synchronization Robustness.}
+By employing named semaphores and shared memory, the system allows independent processes to coordinate safely while maintaining persistence across program instances.  
+All synchronization objects are unlinked and destroyed at shutdown, ensuring that no orphaned semaphores or shared memory regions remain active.  
+This guarantees consistent cleanup and prevents resource leakage in the operating system.
+
+Overall, the synchronization and IPC design provides a robust foundation for safe concurrent operation.  
+It ensures atomic access to critical data structures, maintains mutual exclusion for shared files, and enables efficient interprocess communication between the server and its monitoring tools without compromising performance or scalability.
 
 \subsection{Resource Management (Cache and Files)}
 % Explain LRU Cache algorithm.
 % Use of Reader-Writer Locks (pthread_rwlock) for performance.
 % Reference: src/cache.c
+Efficient resource management is a fundamental aspect of the server’s performance.  
+To minimize disk access latency and improve response time, the system incorporates a lightweight in-memory caching mechanism implemented in \texttt{src/cache.c}.  
+The cache temporarily stores the contents of frequently requested files, allowing subsequent requests for the same resource to be served directly from memory without accessing the filesystem.
+
+\paragraph{Cache Architecture.}
+The cache is implemented as a fixed-size table of entries, each representing a single cached file.  
+Each entry stores the following attributes:
+\begin{itemize}
+  \item The file path (\texttt{char *path});
+  \item A pointer to the file content loaded into memory;
+  \item The file size (in bytes);
+  \item Metadata for cache management, such as last access time or usage counter.
+\end{itemize}
+The total number of entries and the maximum memory size are defined in the configuration file (\texttt{server.conf}) and initialized at server startup by the \texttt{cache\_init()} routine.
+
+\paragraph{LRU Replacement Policy.}
+When the cache becomes fully populated, it needs to remove an current entry to allow for new information. The executed plan follows the \textbf{Least Recently Used (LRU)} strategy, which removes the entry that has not been accessed, for an extended period. Every cache entry keeps a timestamp that gets refreshed with each entry. Upon adding, the system loops through the cache table to find the least just utilized the current entry and substitutes it with the updated file information. This policy offers a fair balance between performance and memory efficiency, as it inherently keeps commonly requested documents while clearing room for new ones.
+
+\paragraph{Reader--Writer Locking.}
+To support concurrent read and write operations on the cache, the implementation employs \textbf{POSIX reader–writer locks} (\texttt{pthread\_rwlock\_t}).  
+These locks allow multiple worker threads to read cache entries simultaneously, while ensuring that write operations (such as file insertion or eviction) occur exclusively.  
+The concurrency model operates as follows:
+\begin{itemize}
+  \item \textbf{Readers (cache hits):} When a requested file is present in the cache, the worker thread obtains a \emph{read lock} (\texttt{pthread\_rwlock\_rdlock()}) to securely access the entry without obstructing other readers.
+  \item \textbf{Writers (cache misses or evictions):} When a file needs to be added or modified, the thread obtains a \emph{write lock} (\texttt{pthread\_rwlock\_wrlock()}) to ensure exclusivity access, blocking any concurrent reads or writes.
+\end{itemize}
+This approach significantly improves performance compared to traditional mutex-based synchronization, as it permits parallel reads of cached data while maintaining data integrity during modifications.
+
+\paragraph{File Loading and Caching Workflow.}
+When a worker thread handles a client upon receiving the request, it initially checks the cache through \texttt{cache\_lookup(path)}. If the file is located (cache hit), the data is instantly transmitted to the client. If the document isn't stored in the cache (cache miss), the the subsequent actions take place:
+\begin{enumerate}
+  \item The thread acquires a write lock to ensure exclusive access.
+  \item The file is opened from the disk using standard I/O routines (\texttt{open()}, \texttt{read()}, \texttt{stat()}).
+  \item The file content is copied into dynamically allocated memory and stored in a cache slot.
+  \item The cache metadata (timestamp, size) is updated, and the lock is released.
+\end{enumerate}
+This system guarantees that a file is loaded into memory by only one thread at any moment, while other threads gain from quick in-memory access after the file is stored in cache.
+
+\paragraph{Cache Coherency and Statistics.}
+Every access to the cache updates its usage metadata and increments the corresponding statistics counters for \emph{cache hits} and \emph{cache misses}, managed by \texttt{src/stats.c}.  
+These counters are protected by semaphores to guarantee atomicity and can be viewed in real time through the \texttt{stats\_reader} utility.  
+By combining semaphores for atomic counters and reader–writer locks for cache access, the implementation achieves both correctness and high throughput.
+
+\paragraph{Resource Cleanup.}
+At shutdown, the cache is fully cleared by the \texttt{cache\_destroy()} routine, which iterates over all valid entries, frees allocated memory buffers, and releases synchronization primitives.  
+This prevents memory leaks and ensures that all file descriptors and dynamically allocated structures are properly deallocated before process termination.
+
+In summary, the resource management subsystem integrates an LRU-based caching algorithm with fine-grained synchronization via reader–writer locks.  
+This design allows the server to efficiently handle multiple concurrent file requests while maintaining low response latency and stable memory usage across varying workloads.
 
 \subsection{HTTP Processing}
 % Request parsing and response construction.
@@ -222,14 +311,60 @@ Overall, the process and thread management strategy balances concurrency with co
 % ----------------------------------------------------------------------
 \section{Challenges and Solutions}
 % Critical section to show understanding of concurrency issues.
+The development of a concurrent HTTP server presented several challenges related to synchronization, communication, and system scalability.
+Designing an architecture that walks the fine line between thread-safety and efficiency required a balancing act of parallelism with data consistency, while ensuring proper cleanup and resource management in all executable scenarios.
+As such, this section aims to bring light to what were considered the key obstacles in the implementation of the solution we provided.
 
 \subsection{Race Conditions}
 % Example: "We detected statistics were losing counts..."
 % Solution: "Implemented an exclusive semaphore for the stats struct."
+During the early stages of development, one of the most prominent concurrency issues encountered was the presence of \textbf{race conditions} in the shared statistics subsystem.  
+The \texttt{stats} structure, stored in a shared memory region, was updated concurrently by multiple worker threads each time a request was served.  
+Because these updates occurred without proper synchronization, simultaneous increments of counters such as \texttt{requests} and \texttt{bytes\_sent} occasionally overwrote each other’s values, resulting in lost counts and inconsistent statistics.
+
+\paragraph{Problem Observation.}
+The issue manifested during stress testing, where the total number of processed requests reported by \texttt{stats\_reader} was consistently lower than the number of actual HTTP requests completed by the server.  
+This discrepancy confirmed that concurrent updates to the same memory region were not atomic and were being interrupted by other threads before completion.
+
+\paragraph{Solution.}
+To ensure atomicity, an \textbf{exclusive binary semaphore} was introduced to protect all accesses to the shared \texttt{stats} structure.  
+Before any modification, a worker thread performs a \texttt{semDown()} operation to acquire exclusive access, updates the relevant counters, and then releases the lock with \texttt{semUp()}.  
+This mechanism guarantees that only one thread at a time can modify the shared statistics, effectively eliminating data races and lost updates.
+
+\paragraph{Verification.}
+After the introduction of this semaphore, repeated executions of the \texttt{test\_concurrent.c} and \texttt{stress\_test.sh} scripts produced consistent results:  
+the total request count reported by \texttt{stats\_reader} matched the number of served HTTP responses.  
+This confirmed that the synchronization strategy successfully enforced atomicity and consistency of shared statistical data across all worker threads.
 
 \subsection{Memory Management and Leaks}
 % Discussion on Valgrind usage.
 % Ensuring shared memory is cleaned (unlink) on shutdown (SIGINT).
+Memory management played a crucial role in the reliability and robustness of the server.  
+Because the system relies on dynamic memory allocation, shared memory segments, and synchronization primitives created at runtime, any mismanagement could result in persistent resource leaks or instability after repeated executions.
+
+\paragraph{Leak Detection with Valgrind.}
+Throughout development, the \textbf{Valgrind} analysis tool was extensively used to detect and diagnose memory leaks, invalid reads or writes, and unfreed heap allocations.  
+Running the server under Valgrind with realistic workloads revealed a small number of unreleased buffers within the cache subsystem and unclosed file descriptors associated with the logging mechanism.  
+These issues were systematically corrected by ensuring that all dynamically allocated buffers are freed, all open files are closed, and all synchronization primitives are properly destroyed before process termination.
+
+\paragraph{Shared Memory and Semaphore Cleanup.}
+The server makes use of POSIX shared memory objects and named semaphores to enable interprocess communication between the main server and auxiliary tools such as \texttt{stats\_reader}.  
+Improper shutdown or unexpected termination (\texttt{Ctrl+C}) initially left behind orphaned resources that persisted in the system, visible through \texttt{ipcs} or \texttt{ls /dev/shm}.  
+To address this, explicit cleanup routines were implemented in \texttt{src/shared\_mem.c} and \texttt{src/semaphores.c}.  
+These routines perform the following actions:
+\begin{itemize}
+  \item Unlink all named semaphores using \texttt{sem\_unlink()};
+  \item Unmap and close the shared memory segment via \texttt{munmap()} and \texttt{shm\_unlink()};
+  \item Free dynamically allocated memory structures associated with cache entries and statistics.
+\end{itemize}
+
+\paragraph{Signal-Driven Resource Management.}
+To guarantee cleanup even in the event of user interruption, the master process installs custom signal handlers for \texttt{SIGINT} and \texttt{SIGTERM}.  
+When triggered, these handlers invoke a global \texttt{cleanup()} function that sequentially joins all worker threads, destroys synchronization objects, releases cache memory, and removes shared memory objects from the system.  
+This ensures a graceful shutdown sequence, preventing resource leakage even under abrupt termination scenarios.
+
+\paragraph{Verification and Stability.}
+
 
 \subsection{Log Synchronization}
 % The problem of interleaved log lines.
