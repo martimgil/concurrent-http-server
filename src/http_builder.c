@@ -44,7 +44,12 @@ void send_http_response_with_body_flag(int fd, int status, const char* status_ms
     strftime(date_str, sizeof(date_str), "%a, %d %b %Y %H:%M:%S GMT", &tm);
 
     // Determine Connection header value
-    const char* connection_val = keep_alive ? "keep-alive" : "close";
+    const char* connection_val;
+    if (keep_alive) {
+        connection_val = "keep-alive";
+    } else {
+        connection_val = "close";
+    }
 
     // Construct HTTP response header
     char header[2048];
@@ -73,10 +78,13 @@ void send_http_response_with_body_flag(int fd, int status, const char* status_ms
         return;
     }
 
-    // Send headers with loop to handle partial sends (FAQ Q15)
+    // Send headers with loop to handle partial sends
     // ssize_t -> Signed size type for number of bytes sent
     // send --> Send data over the socket
     ssize_t total_sent = 0;
+
+
+    // Send headers with loop to handle partial sends
     while (total_sent < header_len) {
         ssize_t sent = send(fd, header + total_sent, header_len - total_sent, 0);
         
@@ -134,9 +142,18 @@ void send_http_partial_response(int fd, const char* content_type, const char* bo
     char date_str[64];
     strftime(date_str, sizeof(date_str), "%a, %d %b %Y %H:%M:%S GMT", &tm);
 
-    const char* connection_val = keep_alive ? "keep-alive" : "close";
+    const char* connection_val; // Connection header value
 
-    char header[2048];
+    // Set connection header value based on keep_alive flag
+    if (keep_alive) {
+        connection_val = "keep-alive";
+    } else {
+        connection_val = "close";
+    }
+
+    char header[2048]; // Buffer to hold formatted header
+
+    // Format the HTTP response header
     int header_len = snprintf(header, sizeof(header),
     "HTTP/1.1 206 Partial Content\r\n"
     "Content-Type: %s\r\n"
@@ -148,6 +165,8 @@ void send_http_partial_response(int fd, const char* content_type, const char* bo
     "\r\n",
     content_type, body_len, start, end, total_size, date_str, connection_val);
 
+
+    // Check for formatting errors
     if (header_len < 0 || header_len >= (int)sizeof(header)) {
         perror("Header formatting failed");
         return;
@@ -155,19 +174,37 @@ void send_http_partial_response(int fd, const char* content_type, const char* bo
 
     // Send headers
     ssize_t total_sent = 0;
+
+    // Send headers with loop to handle partial sends
     while (total_sent < header_len) {
+
+        // Send data over the socket
         ssize_t sent = send(fd, header + total_sent, header_len - total_sent, 0);
-        if (sent <= 0) return;
-        total_sent += sent;
+        
+        if (sent <= 0){
+            return;
+        } // Error handling
+
+        total_sent += sent; // Update total sent bytes
     }
 
     // Send body
     if (body && body_len > 0) {
+
+        // Send body with loop to handle partial sends
         total_sent = 0;
+
+        // Loop through the body and send it in chunks
         while (total_sent < (ssize_t)body_len) {
+
+            // Send data over the socket
             ssize_t sent = send(fd, body + total_sent, body_len - total_sent, 0);
-            if (sent <= 0) return;
-            total_sent += sent;
+            
+            if (sent <= 0){
+                return;
+            } // Error handling
+            
+            total_sent += sent; // Update total sent bytes
         }
     }
 }

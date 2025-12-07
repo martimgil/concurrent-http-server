@@ -36,7 +36,7 @@ typedef struct cache_entry {
     size_t size;            // Size in bytes
     struct cache_entry *prev, *next;  // LRU doubly linked list
     struct cache_entry *hnext;        // Next entry in hash bucket
-    size_t refcnt;          // Reference count (to avoid removal while in use)
+    size_t refcnt;          // Reference count 
 } cache_entry_t;
 
 // File Cache Structure
@@ -113,9 +113,11 @@ static void lru_move_front(file_cache_t *c, cache_entry_t *e) {
     if (e->prev) {
         e->prev->next = e->next; // Update previous's next
     }
+
     if (e->next) {
         e->next->prev = e->prev; // Update next's prev
     }
+
     // If this entry was the tail, update the tail pointer
     if (c->lru_tail == e) {
         c->lru_tail = e->prev; // Update tail
@@ -129,6 +131,7 @@ static void lru_move_front(file_cache_t *c, cache_entry_t *e) {
     if (c->lru_head) {
         c->lru_head->prev = e; // Old head's prev is e
     }
+
     c->lru_head = e; // Update head to e
 
     // If the list was empty before, set tail as well
@@ -141,20 +144,40 @@ static void lru_move_front(file_cache_t *c, cache_entry_t *e) {
 static void lru_push_front(file_cache_t *c, cache_entry_t *e) {
     // Inserts a new entry 'e' at the front of the LRU list.
     // Used when adding a new entry to the cache.
-    e->prev = NULL; e->next = c->lru_head;
-    if (c->lru_head) c->lru_head->prev = e;
+    e->prev = NULL;
+    e->next = c->lru_head;
+
+    if (c->lru_head) {
+        c->lru_head->prev = e;
+    }
+
     c->lru_head = e;
-    if (!c->lru_tail) c->lru_tail = e;  // If list was empty
+
+    if (!c->lru_tail) {
+        c->lru_tail = e;  // If list was empty
+    }
 }
 
 // Removes an entry from the LRU list
 static void lru_remove(file_cache_t *c, cache_entry_t *e) {
     // Removes the entry 'e' from the LRU list.
     // Updates head and tail pointers as necessary.
-    if (e->prev) e->prev->next = e->next;
-    if (e->next) e->next->prev = e->prev;
-    if (c->lru_head == e) c->lru_head = e->next;
-    if (c->lru_tail == e) c->lru_tail = e->prev;
+    if (e->prev) {
+        e->prev->next = e->next;
+    }
+
+    if (e->next) {
+        e->next->prev = e->prev;
+    }
+
+    if (c->lru_head == e) {
+        c->lru_head = e->next;
+    }
+
+    if (c->lru_tail == e) {
+        c->lru_tail = e->prev;
+    }
+    
     e->prev = e->next = NULL;  // Clear pointers
 }
 
@@ -162,8 +185,11 @@ static void lru_remove(file_cache_t *c, cache_entry_t *e) {
 static void bucket_insert(file_cache_t *c, cache_entry_t *e) {
     // Inserts the entry 'e' into the appropriate hash bucket.
     // Uses the hash of the key to determine the bucket index.
-    unsigned long h = hash_key(e->key) % c->nbuckets;
+
+    unsigned long h = hash_key(e->key) % c->nbuckets; // Bucket index
+
     e->hnext = c->buckets[h];  // Point to current head of bucket
+
     c->buckets[h] = e;         // Make e the new head
 }
 
@@ -171,8 +197,10 @@ static void bucket_insert(file_cache_t *c, cache_entry_t *e) {
 static void bucket_remove(file_cache_t *c, cache_entry_t *e) {
     // Removes the entry 'e' from its hash bucket.
     // Traverses the linked list in the bucket to find and remove e.
-    unsigned long h = hash_key(e->key) % c->nbuckets;
+    unsigned long h = hash_key(e->key) % c->nbuckets; // Bucket index
+
     cache_entry_t **p = &c->buckets[h];  // Pointer to head of bucket
+
     while (*p) {
         if (*p == e) { *p = e->hnext; e->hnext = NULL; return; }  // Remove e
         p = &(*p)->hnext;  // Move to next
@@ -181,12 +209,20 @@ static void bucket_remove(file_cache_t *c, cache_entry_t *e) {
 
 // Evicts entries from the cache until within capacity
 static void evict_if_needed(file_cache_t *c) {
+
     // Evicts least recently used entries until capacity is not exceeded.
     // Skips entries that are currently in use (refcnt > 0).
     while (c->bytes_used > c->capacity && c->lru_tail) {
+
         cache_entry_t *e = c->lru_tail;  // Start from least recent
-        while (e && e->refcnt > 0) e = e->prev;  // Find one not in use
-        if (!e) break;  // All in use, wait for release
+
+        while (e && e->refcnt > 0){ 
+            e = e->prev // Find one not in use
+        };  
+
+        if (!e){
+            break;
+        }  // All in use, wait for release
 
         bucket_remove(c, e); // Remove from hash bucket
         lru_remove(c, e);   // Remove from LRU list
@@ -314,7 +350,7 @@ bool cache_acquire(file_cache_t *c, const char *key, cache_handle_t *out) {
         return false;
     }
 
-    // Entry found: move to front of LRU list (most recently used)
+    // Entry found: move to front of LRU list
     lru_move_front(c, e);
 
     // Increment reference count to mark as in-use
@@ -335,10 +371,10 @@ bool cache_acquire(file_cache_t *c, const char *key, cache_handle_t *out) {
 
 
 /*
- * Releases a reference to a cache entry acquired via cache_acquire.
- * Decrements the reference count. If capacity is exceeded after release,
- * triggers LRU eviction. Clears the handle to prevent reuse.
- * Thread-safe with mutex.
+ Releases a reference to a cache entry acquired via cache_acquire.
+ Decrements the reference count. If capacity is exceeded after release,
+ triggers LRU eviction. Clears the handle to prevent reuse.
+ Thread-safe with mutex.
  */
 
 void cache_release(file_cache_t *c, cache_handle_t *h) {
@@ -371,9 +407,9 @@ void cache_release(file_cache_t *c, cache_handle_t *h) {
 }
 
 /*
- * Reads the entire file at abs_path into memory.
- * Allocates a buffer, reads the file, and sets data and size.
- * Returns true on success, false on failure (file not found, read error, etc.).
+  Reads the entire file at abs_path into memory.
+  Allocates a buffer, reads the file, and sets data and size.
+  Returns true on success, false on failure (file not found, read error, etc.).
  */
 static bool read_file_into_memory(const char *abs_path, uint8_t **data, size_t *size) {
     *data = NULL; // Initialize output data pointer
@@ -447,12 +483,12 @@ static bool read_file_into_memory(const char *abs_path, uint8_t **data, size_t *
 }
 
 /*
- * Loads a file into the cache if not already present.
- * First checks if the key is already in cache (via cache_acquire).
- * If not, reads the file from disk, creates a new entry, inserts into hash and LRU,
- * and evicts if necessary. Increments refcnt and fills output handle.
- * Thread-safe with mutex.
- */
+Loads a file into the cache if not already present.
+First checks if the key is already in cache (via cache_acquire).
+If not, reads the file from disk, creates a new entry, inserts into hash and LRU,
+and evicts if necessary. Increments refcnt and fills output handle.
+Thread-safe with mutex.
+*/
 bool cache_load_file(file_cache_t *c, const char *key, const char *abs_path, cache_handle_t *out) {
 
     // Validate input parameters
@@ -476,6 +512,7 @@ bool cache_load_file(file_cache_t *c, const char *key, const char *abs_path, cac
 
     // Double-check if another thread loaded it while we were reading
     unsigned long h = hash_key(key) % c->nbuckets; // Hash bucket index
+
     cache_entry_t *e = bucket_find(c->buckets[h], key); // Search for entry
 
     // If found, reuse existing entry
@@ -542,16 +579,17 @@ bool cache_load_file(file_cache_t *c, const char *key, const char *abs_path, cac
     out->size = e->size;
     out->_entry = e;
 
-    pthread_rwlock_unlock(&c->rwlock);
+    pthread_rwlock_unlock(&c->rwlock); // Unlock cache
+
     return true;
 }
 
 /*
- * Removes the entry with the given key from the cache.
- * Only succeeds if the entry exists and is not currently in use (refcnt == 0).
- * Frees the associated memory and updates statistics.
- * Thread-safe with mutex.
- */
+Removes the entry with the given key from the cache.
+Only succeeds if the entry exists and is not currently in use (refcnt == 0).
+Frees the associated memory and updates statistics.
+Thread-safe with mutex.
+*/
 bool cache_invalidate(file_cache_t *c, const char *key) {
 
     // Validate input parameters
@@ -595,10 +633,10 @@ bool cache_invalidate(file_cache_t *c, const char *key) {
 }
 
 /*
- * Retrieves current cache statistics.
- * Copies the values to the provided output pointers if not NULL.
- * Thread-safe with mutex.
- */
+Retrieves current cache statistics.
+Copies the values to the provided output pointers if not NULL.
+Thread-safe with mutex.
+*/
 void cache_stats(
     file_cache_t *c, // Cache instance
     size_t *out_items, // Number of items

@@ -29,8 +29,8 @@ bool cache_acquire(file_cache_t *cache, const char *key, cache_handle_t *out);
 void cache_release(file_cache_t *cache, cache_handle_t *handle);
 
 /* Load a file from the filesystem into the cache (or reuse existing entry)
- * key: logical key (e.g., HTTP path)
- * abs_path: absolute filesystem path
+key: logical key (e.g., HTTP path)
+abs_path: absolute filesystem path
  */
 bool cache_load_file(file_cache_t *cache, const char *key, const char *abs_path, cache_handle_t *out);
 

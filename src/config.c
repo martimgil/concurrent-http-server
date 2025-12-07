@@ -76,9 +76,16 @@ int load_config(const char* filename, server_config_t* config) {
                 // Copy the document root path into the configuration structure
                 // config->document_root -> Document root path in the configuration structure
                 // memcpy -> Copy the string with size limit
+
                 size_t len = strlen(value);
-                if (len > sizeof(config->document_root) - 1) len = sizeof(config->document_root) - 1;
+
+                // Ensure the string does not exceed the buffer size
+                if (len > sizeof(config->document_root) - 1){
+                    len = sizeof(config->document_root) - 1;
+                };
+
                 memcpy(config->document_root, value, len);
+
                 config->document_root[len] = '\0';
 
             } else if (strcmp(key, "LOG_FILE") == 0) {
@@ -86,7 +93,12 @@ int load_config(const char* filename, server_config_t* config) {
                 // Copy the log file path into the configuration structure
                 // config->log_file -> Log file path in the configuration structure
                 size_t len = strlen(value);
-                if (len > sizeof(config->log_file) - 1) len = sizeof(config->log_file) - 1;
+
+                // Ensure the string does not exceed the buffer size
+                if (len > sizeof(config->log_file) - 1){
+                    len = sizeof(config->log_file) - 1;
+                };
+
                 memcpy(config->log_file, value, len);
                 config->log_file[len] = '\0';
 
