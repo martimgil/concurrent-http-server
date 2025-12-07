@@ -18,4 +18,7 @@ void send_http_response_with_body_flag(int fd, int status, const char* status_ms
 void send_http_partial_response(int fd, const char* content_type, const char* body, size_t body_len, 
                                 size_t start, size_t end, size_t total_size, int keep_alive);
 
+// Sends an nginx-style error page response (400, 403, 404, 405, 416, 500, 503, etc.)
+void send_error_response(int fd, int status, const char* status_msg, int keep_alive);
+
 #endif

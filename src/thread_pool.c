@@ -95,10 +95,9 @@ static void send_content(int client_fd, const char* content_type, const char* da
 
     // Validate range
     if (is_partial && (start < 0 || end >= (long)total_size || start > end)) {
-        const char* msg = "<h1>416 Range Not Satisfiable</h1>";
-        send_http_response(client_fd, 416, "Range Not Satisfiable", "text/html", msg, strlen(msg), keep_alive);
+        send_error_response(client_fd, 416, "Range Not Satisfiable", keep_alive);
         *status_code = 416;
-        *bytes_sent = strlen(msg);
+        *bytes_sent = 0;
         return;
     }
 
@@ -166,10 +165,9 @@ void handle_client_request(int client_fd, shared_data_t* shm, semaphores_t* sems
     http_request_t req;
 
     if (parse_http_request(buffer, &req) != 0){
-        const char* msg = "<h1>400 Bad Request</h1>";
-        send_http_response(client_fd, 400, "Bad Request", "text/html", msg, strlen(msg), 0);
+        send_error_response(client_fd, 400, "Bad Request", 0);
         status_code = 400;
-        bytes_sent = (int)strlen(msg);
+        bytes_sent = 0;
         long end_time = get_time_ms(); 
         update_stats(shm, sems, status_code, bytes_sent, end_time - start_time); 
         logger_write("127.0.0.1", "?", "?", status_code, (size_t)bytes_sent, end_time - start_time);
@@ -179,10 +177,9 @@ void handle_client_request(int client_fd, shared_data_t* shm, semaphores_t* sems
 
     int is_head_request = (strcmp(req.method, "HEAD") == 0);
     if (strcmp(req.method, "GET") != 0 && !is_head_request){
-        const char* msg = "<h1>405 Method Not Allowed</h1>";
-        send_http_response(client_fd, 405, "Method Not Allowed", "text/html", msg, strlen(msg), 0);
+        send_error_response(client_fd, 405, "Method Not Allowed", 0);
         status_code = 405;
-        bytes_sent = (int)strlen(msg);
+        bytes_sent = 0;
         long end_time = get_time_ms(); 
         update_stats(shm, sems, status_code, bytes_sent, end_time - start_time); 
         logger_write("127.0.0.1", req.method, req.path, status_code, (size_t)bytes_sent, end_time - start_time);
@@ -261,10 +258,9 @@ void handle_client_request(int client_fd, shared_data_t* shm, semaphores_t* sems
     const char* relpath = (strcmp(req.path, "/") == 0) ? "/index.html" : req.path;
 
     if (!is_path_safe(relpath)) {
-        const char* msg = "<h1>403 Forbidden</h1>";
-        send_http_response(client_fd, 403, "Forbidden", "text/html", msg, strlen(msg), 0);
+        send_error_response(client_fd, 403, "Forbidden", 0);
         status_code = 403;
-        bytes_sent = (int)strlen(msg);
+        bytes_sent = 0;
         long end_time = get_time_ms();
         update_stats(shm, sems, status_code, bytes_sent, end_time - start_time);
         logger_write("127.0.0.1", req.method, req.path, status_code, (size_t)bytes_sent, end_time - start_time);
@@ -291,10 +287,9 @@ void handle_client_request(int client_fd, shared_data_t* shm, semaphores_t* sems
         logger_write("127.0.0.1", req.method, req.path, status_code, (size_t)bytes_sent, end_time - start_time);
     }
     else if (access(abs_path, F_OK) != 0){
-        const char* msg = "<h1>404 Not Found</h1>";
-        send_http_response(client_fd, 404, "Not Found", "text/html", msg, strlen(msg), 0);
+        send_error_response(client_fd, 404, "Not Found", 0);
         status_code = 404;
-        bytes_sent = (int)strlen(msg);
+        bytes_sent = 0;
         long end_time = get_time_ms(); 
         update_stats(shm, sems, status_code, bytes_sent, end_time - start_time); 
         logger_write("127.0.0.1", req.method, req.path, status_code, (size_t)bytes_sent, end_time - start_time);
@@ -312,8 +307,7 @@ void handle_client_request(int client_fd, shared_data_t* shm, semaphores_t* sems
                     // Use helper to handle range/full content
                     send_content(client_fd, content_type, tmp_buf, file_size, &req, 0, is_head_request, &status_code, &bytes_sent);
                 } else {
-                    const char* msg = "<h1>500 Internal Server Error</h1>";
-                    send_http_response(client_fd, 500, "Internal Server Error", "text/html", msg, strlen(msg), 0);
+                    send_error_response(client_fd, 500, "Internal Server Error", 0);
                     status_code = 500;
                 }
                 if(tmp_buf) free(tmp_buf);
@@ -322,21 +316,18 @@ void handle_client_request(int client_fd, shared_data_t* shm, semaphores_t* sems
                 // Check errno to determine the type of error
                 if (errno == EACCES) {
                     // Permission denied - return 403 Forbidden
-                    const char* msg = "<h1>403 Forbidden</h1>";
-                    send_http_response(client_fd, 403, "Forbidden", "text/html", msg, strlen(msg), 0);
+                    send_error_response(client_fd, 403, "Forbidden", 0);
                     status_code = 403;
-                    bytes_sent = (int)strlen(msg);
+                    bytes_sent = 0;
                 } else {
                     // Other errors (e.g., memory allocation failure) - return 500
-                    const char* msg = "<h1>500 Internal Server Error</h1>";
-                    send_http_response(client_fd, 500, "Internal Server Error", "text/html", msg, strlen(msg), 0);
+                    send_error_response(client_fd, 500, "Internal Server Error", 0);
                     status_code = 500;
-                    bytes_sent = (int)strlen(msg);
+                    bytes_sent = 0;
                 }
             }
         } else {
-            const char* msg = "<h1>500 Internal Server Error</h1>";
-            send_http_response(client_fd, 500, "Internal Server Error", "text/html", msg, strlen(msg), 0);
+            send_error_response(client_fd, 500, "Internal Server Error", 0);
             status_code = 500;
         }
         long end_time = get_time_ms(); 

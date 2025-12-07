@@ -252,12 +252,32 @@ static int enqueue_connection(shared_data_t* shm, semaphores_t* sems, int worker
     // Non-blocking wait for a free slot to implement "Reject with 503" requirement
     if (sem_trywait(sems->empty_slots) != 0) {
         if (errno == EAGAIN) {
-             // Queue is full - Send 503 Service Unavailable
-             const char* response = "HTTP/1.1 503 Service Unavailable\r\n"
-                                    "Content-Type: text/html\r\n"
-                                    "Content-Length: 35\r\n"
-                                    "Connection: close\r\n\r\n"
-                                    "<h1>503 Service Unavailable</h1>";
+             // Queue is full - Send 503 Service Unavailable with nginx-style page
+             const char* response = 
+                 "HTTP/1.1 503 Service Unavailable\r\n"
+                 "Content-Type: text/html; charset=utf-8\r\n"
+                 "Connection: close\r\n"
+                 "Content-Length: 583\r\n\r\n"
+                 "<!DOCTYPE html>\n"
+                 "<html>\n"
+                 "<head>\n"
+                 "<title>503 Service Unavailable</title>\n"
+                 "<style>\n"
+                 "    body { font-family: Tahoma, Verdana, Arial, sans-serif; background-color: #fff; color: #000; margin: 0; padding: 0; }\n"
+                 "    .container { width: 100%; margin: 0 auto; text-align: center; padding-top: 10%; }\n"
+                 "    h1 { font-size: 36px; font-weight: normal; margin-bottom: 10px; }\n"
+                 "    hr { border: none; border-top: 1px solid #ccc; width: 50%; margin: 20px auto; }\n"
+                 "    .footer { font-size: 12px; color: #333; }\n"
+                 "</style>\n"
+                 "</head>\n"
+                 "<body>\n"
+                 "<div class=\"container\">\n"
+                 "    <h1>503 Service Unavailable</h1>\n"
+                 "    <hr>\n"
+                 "    <p class=\"footer\">ConcurrentHTTP/1.0</p>\n"
+                 "</div>\n"
+                 "</body>\n"
+                 "</html>\n";
              // Best effort write (ignore result)
              if (write(client_fd, response, strlen(response)) < 0) { /* ignore */ }
              return -2; // Indication of rejection

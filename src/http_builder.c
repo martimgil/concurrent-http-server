@@ -8,6 +8,65 @@
 // Forward declaration for send_http_response_with_body_flag
 void send_http_response_with_body_flag(int fd, int status, const char* status_msg, const char* content_type, const char* body, size_t body_len, int send_body, int keep_alive);
 
+// Generate nginx-style error page HTML
+// Returns the length of the generated HTML
+static int generate_error_page(char* buffer, size_t buffer_size, int status, const char* status_msg) {
+    return snprintf(buffer, buffer_size,
+        "<!DOCTYPE html>\n"
+        "<html>\n"
+        "<head>\n"
+        "<title>%d %s</title>\n"
+        "<style>\n"
+        "    body {\n"
+        "        font-family: Tahoma, Verdana, Arial, sans-serif;\n"
+        "        background-color: #fff;\n"
+        "        color: #000;\n"
+        "        margin: 0;\n"
+        "        padding: 0;\n"
+        "    }\n"
+        "    .container {\n"
+        "        width: 100%%;\n"
+        "        margin: 0 auto;\n"
+        "        text-align: center;\n"
+        "        padding-top: 10%%;\n"
+        "    }\n"
+        "    h1 {\n"
+        "        font-size: 36px;\n"
+        "        font-weight: normal;\n"
+        "        margin-bottom: 10px;\n"
+        "    }\n"
+        "    hr {\n"
+        "        border: none;\n"
+        "        border-top: 1px solid #ccc;\n"
+        "        width: 50%%;\n"
+        "        margin: 20px auto;\n"
+        "    }\n"
+        "    .footer {\n"
+        "        font-size: 12px;\n"
+        "        color: #333;\n"
+        "    }\n"
+        "</style>\n"
+        "</head>\n"
+        "<body>\n"
+        "<div class=\"container\">\n"
+        "    <h1>%d %s</h1>\n"
+        "    <hr>\n"
+        "    <p class=\"footer\">ConcurrentHTTP/1.0</p>\n"
+        "</div>\n"
+        "</body>\n"
+        "</html>\n",
+        status, status_msg, status, status_msg);
+}
+
+// Send an nginx-style error page response
+void send_error_response(int fd, int status, const char* status_msg, int keep_alive) {
+    char error_page[2048];
+    int page_len = generate_error_page(error_page, sizeof(error_page), status, status_msg);
+    if (page_len > 0 && page_len < (int)sizeof(error_page)) {
+        send_http_response(fd, status, status_msg, "text/html; charset=utf-8", error_page, (size_t)page_len, keep_alive);
+    }
+}
+
 // Function to send an HTTP response
 // Arguments:
 // fd - File descriptor to send the response to
