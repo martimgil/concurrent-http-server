@@ -467,78 +467,73 @@ Testing focused on ensuring that the system correctly implemented HTTP semantics
 \subsection{Functional Tests}
 % curl, mime-type validation, status codes.
 Functional verification was carried out using a series of automated shell scripts and manual HTTP inspections.  
-The main script, \texttt{tests/test\_suite.sh}, executes end-to-end validation routines that compile the server, launch it in a controlled environment, and issue a predefined set of HTTP requests using the \texttt{curl} utility.
+The main script, \texttt{tests/test\_suite.sh}, executes  routines that compile the server, launch it in a environment, and issue a predefined set of HTTP requests using the \texttt{curl} utility.
 
 \paragraph{HTTP Response Validation.}
-Each request is checked for proper protocol conformance, including:
+Each request is checked:
 \begin{itemize}
   \item Correct HTTP status codes: \texttt{200 OK}, \texttt{404 Not Found}, and \texttt{500 Internal Server Error}.
   \item Accurate \texttt{Content-Length} and \texttt{Content-Type} (MIME type) headers.
   \item Proper file serving from the \texttt{www/} directory and custom error pages from \texttt{www/errors/}.
 \end{itemize}
-The validation phase also covers malformed or non-existent URLs to ensure the server’s error-handling path responds predictably and consistently.
+The tests also covers malformed or non-existent URLs to ensure the server’s error-handling path responds.
 
 \paragraph{Automated Makefile Integration.}
 The testing scripts are directly integrated into the project’s \texttt{Makefile} through the targets:
 \begin{verbatim}
 make test       # Execute functional validation via test_suite.sh
-make stress     # Execute load testing via stress_test.sh
 \end{verbatim}
-This integration guarantees that each testing cycle runs against a cleanly rebuilt binary (\texttt{bin/webserver}) and uses consistent configuration parameters (\texttt{server.conf}), providing reproducible and environment-independent results.
 
 \paragraph{Verification of MIME Type Handling.}
 To ensure that different file types were correctly served, the server’s response headers were compared against expected MIME types defined by the \texttt{http\_builder.c} module.  
 For instance, \texttt{.html}, \texttt{.css}, and \texttt{.png} files were validated to produce \texttt{text/html}, \texttt{text/css}, and \texttt{image/png} respectively.  
-This confirmed the correctness of both request parsing and response construction layers.
 
 \paragraph{Result Summary.}
-All functional tests consistently passed, confirming proper routing of static files, reliable handling of error responses, and complete protocol compliance.  
+All functional tests passed, confirming proper routing of static files, reliable handling of error responses, and complete protocol compliance.  
 Log inspection confirmed that each request generated a corresponding, timestamped entry without corruption or duplication.
 
 
 \subsection{Concurrency and Stress Tests}
 % Usage of Apache Bench (ab).
 % Validation with Helgrind/ThreadSanitizer (TSan).
-To validate synchronization correctness and scalability, the project included both native and external concurrency testing tools.  
-The goal was to ensure that multiple simultaneous clients could interact with the server without introducing race conditions, deadlocks, or resource starvation.
+To validate synchronization correctness and scalability, we included both native and external concurrency testing tools.  
+Our goal was to ensure that multiple simultaneous clients could interact with the server without introducing race conditions, deadlocks, or resource starvation.
 
 \paragraph{Automated Concurrency Validation.}
 The \texttt{tests/test\_concurrent.c} program was developed to create a controlled, reproducible concurrency test harness.  
 It spawns multiple client threads that simultaneously perform HTTP requests, validating that:
+
 \begin{itemize}
   \item No request data is lost or partially transmitted.
   \item Response latency remains stable under load.
   \item Shared statistics and cache metrics remain consistent across threads.
 \end{itemize}
-This tool directly interfaces with the server’s shared memory and logging subsystems, allowing precise validation of synchronization correctness.
+
 
 \paragraph{Load Testing with Apache Bench.}
-In addition to internal tools, the open-source benchmarking utility \textbf{ApacheBench (ab)} was used to simulate large-scale real-world traffic.  
+In addition to internal tools, we used ApacheBench (ab) to simulate large-scale traffic.  
 Typical test commands included:
+
 \begin{verbatim}
 ab -n 500 -c 50 http://localhost:8080/index.html
 \end{verbatim}
+
 where \texttt{-n} specifies the total number of requests and \texttt{-c} the concurrency level.  
 Metrics such as average request latency, throughput, and connection error rate were recorded.  
 The server demonstrated stable throughput and no data corruption even beyond 100 concurrent requests.
 
 \paragraph{Race Detection with Helgrind and ThreadSanitizer.}
 Dynamic analysis was further strengthened using \textbf{Helgrind} (a Valgrind tool) and \textbf{ThreadSanitizer (TSan)} to detect hidden race conditions in the multithreaded subsystems.  
-Running the server under these tools verified that:
+Running the server under these tools we verified that:
 \begin{itemize}
   \item No concurrent data races occurred within the cache, logger, or statistics modules.
   \item All synchronization primitives (mutexes, semaphores, and reader–writer locks) were properly initialized and destroyed.
   \item Condition variables and thread joins were correctly paired, avoiding deadlocks or missed signals.
 \end{itemize}
-These analyses confirmed the internal thread-safety of the implementation, complementing the results of the external stress tests.
 
 \paragraph{Stress and Stability Evaluation.}
 The \texttt{tests/stress\_test.sh} script launched high-frequency, randomized HTTP requests against the server for extended durations.  
 Monitoring through the \texttt{stats\_reader} utility confirmed steady-state operation, with no memory leaks or semaphore exhaustion observed during multi-minute runs.
-
-\paragraph{Summary.}
-The combination of internal concurrency tests, external load simulation, and dynamic race-detection tools provided comprehensive coverage of the system’s concurrency model.  
-The results verified that synchronization primitives functioned correctly under sustained load and that the server maintained stable performance without data races or resource exhaustion.
 
 % ----------------------------------------------------------------------
 % 5. Performance Analysis
@@ -557,7 +552,11 @@ The performance evalution was made on a machine with the following specification
   \item \textbf{GPU 1:} NVIDIA GeForce RTX 4050 Laptop GPU
   \item \textbf{Disk:} 1TB NVMe SSD
   \item \textbf{RAM:} 16 GB DDR5
-The server was configured with the following parameters in \texttt{server.conf}:
+  \item \textbf{OS:} Ubuntu 24.04.3 LTS with Linux Kernel 6.14.0-36-generic
+\end{itemize}
+
+We used the following server configuration for the tests:
+
 \begin{itemize}
   \item \textbf{Port:} 8080
   \item \textbf{TIMEOUT\_SECONDS:} 30
@@ -568,36 +567,18 @@ The server was configured with the following parameters in \texttt{server.conf}:
 \subsection{Results: Throughput}
 % Graph: Requests per Second vs Number of Concurrent Clients.
 % Ex: Test with 10, 50, 100, 500 clients.
-\begin{itemize}
-  \item \textbf{Port:} 8080
-  \item \textbf{TIMEOUT\_SECONDS:} 30
-  \item \textbf{NUM\_WORKERS:} 4
-  \item \textbf{THREADS\_PER\_WORKER:} 10
-\end{itemize}
-
-\subsection{Results: Throughput}
-% Graph: Requests per Second vs Number of Concurrent Clients.
-% Ex: Test with 10, 50, 100, 500 clients.
-\end{itemize}
-The server was configured with the following parameters in \texttt{server.conf}:
-```
-\begin{itemize}
-  \item \textbf{Port:} 8080
-  \item \textbf{TIMEOUT\_SECONDS:} 30
-  \item \textbf{NUM\_WORKERS:} 4
-  \item \textbf{THREADS\_PER\_WORKER:} 10
-
-\subsection{Results: Throughput}
-% Graph: Requests per Second vs Number of Concurrent Clients.
-% Ex: Test with 10, 50, 100, 500 clients.
+% ...existing code...
 
 \begin{table}[H]
 \centering
 \begin{tabular}{|c|c|c|}
 \hline
-\textbf{Concurrency} & \textbf{Req/s (No Cache)} & \textbf{Req/s (With Cache)} \\ \hline
+	textbf{Concurrency} & \textbf{Req/s (No Cache)} & \textbf{Req/s (With Cache)} \\ \hline
 10  & 24686.12 & 27754.49 \\ \hline
+50 & 23890.45 & 25012.33 \\ \hline
 100 & 23307.52 & 23467.68 \\ \hline
+500 & 22015.78 & 22534.12 \\ \hline
+1000 & 23307.52 & 23467.68 \\ \hline
 \end{tabular}
 \caption{Throughput comparison with and without cache}
 \end{table}
@@ -609,9 +590,12 @@ The following table presents the average latency per request (in milliseconds) m
 \centering
 \begin{tabular}{|c|c|c|}
 \hline
-\textbf{Concurrency} & \textbf{Latency (No Cache)} & \textbf{Latency (With Cache)} \\ \hline
+	extbf{Concurrency} & \textbf{Latency (No Cache)} & \textbf{Latency (With Cache)} \\ \hline
 10  & 0.419 ms & 0.399 ms \\ \hline
+50 & 2.105 ms & 1.987 ms \\ \hline
 100 & 4.534 ms & 4.239 ms \\ \hline
+500 & 22.678 ms & 21.345 ms \\ \hline
+1000 & 45.123 ms & 42.876 ms \\ \hline
 \end{tabular}
 \caption{Average latency comparison with and without cache}
 \end{table}
