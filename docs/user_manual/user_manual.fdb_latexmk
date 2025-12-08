@@ -1,5 +1,5 @@
 # Fdb version 4
-["pdflatex"] 1765155657.83774 "/home/martimgil/Documents/Trabalho2_SO/docs/user_manual/user_manual.tex" "user_manual.pdf" "user_manual" 1765155658.3798 0
+["pdflatex"] 1765216952.6484 "/home/martimgil/Documents/Trabalho2_SO/docs/user_manual/user_manual.tex" "user_manual.pdf" "user_manual" 1765216953.54639 0
   "/etc/texmf/web2c/texmf.cnf" 1763149566.21733 475 c0e671620eb5563b2130f56340a5fde8 ""
   "/home/martimgil/.texlive2023/texmf-var/fonts/pk/ljfour/jknappen/ec/ecbx1200.600pk" 1763217169.61609 31928 0eddabbfb4216a4571d86e6afc225d07 ""
   "/home/martimgil/.texlive2023/texmf-var/fonts/pk/ljfour/jknappen/ec/ecbx1440.600pk" 1763153921.5103 40112 0417eebec16e1681de0766d2b921754b ""
@@ -14,7 +14,7 @@
   "/home/martimgil/.texlive2023/texmf-var/fonts/pk/ljfour/jknappen/ec/ectt1200.600pk" 1764868430.52514 24132 8d0ce80232d1d84b561844f407a24090 ""
   "/home/martimgil/.texlive2023/texmf-var/fonts/pk/ljfour/jknappen/ec/tcrm1200.600pk" 1764865327.04232 14040 ce399ac02a679feb3971e462ba61d109 ""
   "/home/martimgil/.texlive2023/texmf-var/fonts/pk/ljfour/jknappen/ec/tctt1200.600pk" 1765061047.14464 11344 a2c4d908572d7f530d8d5547f8b65fca ""
-  "/home/martimgil/Documents/Trabalho2_SO/docs/user_manual/user_manual.tex" 1765155657.05104 30246 b78cc8e8c8af4e8c4b0adc083cb5bef8 ""
+  "/home/martimgil/Documents/Trabalho2_SO/docs/user_manual/user_manual.tex" 1765155995.00628 29192 b9ce6bed8eac73f68f418cb7c34a5580 ""
   "/usr/share/texlive/texmf-dist/fonts/map/fontname/texfonts.map" 1577235249 3524 cb3e574dea2d1052e39280babc910dc8 ""
   "/usr/share/texlive/texmf-dist/fonts/tfm/jknappen/ec/ecbx1200.tfm" 1136768653 3584 402da0b29eafbad07963b1224b222f18 ""
   "/usr/share/texlive/texmf-dist/fonts/tfm/jknappen/ec/ecbx1440.tfm" 1136768653 3584 13049b61b922a28b158a38aeff75ee9b ""
@@ -111,10 +111,10 @@
   "/var/lib/texmf/fonts/map/pdftex/updmap/pdftex.map" 1763472103.96559 128028 f533b797fba58d231669ea19e894e23e ""
   "/var/lib/texmf/web2c/pdftex/pdflatex.fmt" 1763472148 6800791 1c533c7e200f5e0a86a8ad65ae6604e3 ""
   "deti.png" 1763154760.49457 17687 bcd6fa2317ac507a619b1cd446dc142c ""
-  "user_manual.aux" 1765155658.32532 6826 9bfb059b013e07b8a0c223299d69ae1a "pdflatex"
-  "user_manual.out" 1765155658.32532 6387 31ada8140e3488adf981fee61393f815 "pdflatex"
-  "user_manual.tex" 1765155657.05104 30246 b78cc8e8c8af4e8c4b0adc083cb5bef8 ""
-  "user_manual.toc" 1765155658.32722 4389 061c37639060cf8a166dc7af39f1a89c "pdflatex"
+  "user_manual.aux" 1765216953.44968 6554 b3744ef93e6c0909d38ecde50c56305a "pdflatex"
+  "user_manual.out" 1765216953.45168 5975 cfd257b5f9a30e05017c60306d76a0b8 "pdflatex"
+  "user_manual.tex" 1765155995.00628 29192 b9ce6bed8eac73f68f418cb7c34a5580 ""
+  "user_manual.toc" 1765216953.45338 4199 a0e7d26043fbc2f78263021b11599734 "pdflatex"
   (generated)
   "user_manual.aux"
   "user_manual.log"
