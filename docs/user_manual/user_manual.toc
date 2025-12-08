@@ -1,15 +1,50 @@
 \babel@toc {english}{}\relax 
 \contentsline {section}{\numberline {1}Introduction}{2}{section.1}%
 \contentsline {section}{\numberline {2}System Requirements}{2}{section.2}%
-\contentsline {section}{\numberline {3}Compilation}{2}{section.3}%
-\contentsline {subsection}{\numberline {3.1}Standard Build}{2}{subsection.3.1}%
-\contentsline {subsection}{\numberline {3.2}Cleaning}{2}{subsection.3.2}%
-\contentsline {subsection}{\numberline {3.3}Debug/Test Modes}{2}{subsection.3.3}%
-\contentsline {section}{\numberline {4}Configuration}{2}{section.4}%
-\contentsline {section}{\numberline {5}Execution}{3}{section.5}%
-\contentsline {subsection}{\numberline {5.1}Starting the Server}{3}{subsection.5.1}%
-\contentsline {subsection}{\numberline {5.2}Graceful Shutdown}{3}{subsection.5.2}%
-\contentsline {section}{\numberline {6}Usage Examples}{3}{section.6}%
-\contentsline {subsection}{\numberline {6.1}Basic HTTP Request}{3}{subsection.6.1}%
-\contentsline {subsection}{\numberline {6.2}Checking Statistics}{3}{subsection.6.2}%
-\contentsline {section}{\numberline {7}Troubleshooting}{4}{section.7}%
+\contentsline {subsection}{\numberline {2.1}Software Requirements}{2}{subsection.2.1}%
+\contentsline {subsection}{\numberline {2.2}Dependencies and Libraries}{3}{subsection.2.2}%
+\contentsline {subsection}{\numberline {2.3}Test Environment}{3}{subsection.2.3}%
+\contentsline {subsection}{\numberline {2.4}User Permissions}{3}{subsection.2.4}%
+\contentsline {section}{\numberline {3}Compilation}{3}{section.3}%
+\contentsline {subsection}{\numberline {3.1}Build System Overview}{3}{subsection.3.1}%
+\contentsline {subsection}{\numberline {3.2}Standard Build}{4}{subsection.3.2}%
+\contentsline {subsection}{\numberline {3.3}Running the Server}{4}{subsection.3.3}%
+\contentsline {subsection}{\numberline {3.4}Cleaning Build Artifacts}{4}{subsection.3.4}%
+\contentsline {subsection}{\numberline {3.5}Debug and Analysis Builds}{5}{subsection.3.5}%
+\contentsline {subsection}{\numberline {3.6}Testing Integration}{5}{subsection.3.6}%
+\contentsline {subsection}{\numberline {3.7}Help and Documentation}{6}{subsection.3.7}%
+\contentsline {section}{\numberline {4}Configuration}{6}{section.4}%
+\contentsline {subsection}{\numberline {4.1}Editing the Configuration File}{6}{subsection.4.1}%
+\contentsline {subsection}{\numberline {4.2}Configuration Parameters}{7}{subsection.4.2}%
+\contentsline {subsection}{\numberline {4.3}Runtime Behavior}{7}{subsection.4.3}%
+\contentsline {subsection}{\numberline {4.4}Default Values}{7}{subsection.4.4}%
+\contentsline {subsection}{\numberline {4.5}Validation and Error Handling}{8}{subsection.4.5}%
+\contentsline {subsection}{\numberline {4.6}Reloading Configuration}{8}{subsection.4.6}%
+\contentsline {section}{\numberline {5}Execution}{8}{section.5}%
+\contentsline {subsection}{\numberline {5.1}Starting the Server}{8}{subsection.5.1}%
+\contentsline {subsection}{\numberline {5.2}Graceful Shutdown}{8}{subsection.5.2}%
+\contentsline {section}{\numberline {6}Usage Examples}{9}{section.6}%
+\contentsline {subsection}{\numberline {6.1}Basic HTTP Request}{9}{subsection.6.1}%
+\contentsline {subsection}{\numberline {6.2}Accessing from a Web Browser}{9}{subsection.6.2}%
+\contentsline {subsection}{\numberline {6.3}Monitoring Logs}{10}{subsection.6.3}%
+\contentsline {subsection}{\numberline {6.4}Checking Live Statistics}{10}{subsection.6.4}%
+\contentsline {subsection}{\numberline {6.5}Concurrent Request Example}{10}{subsection.6.5}%
+\contentsline {subsection}{\numberline {6.6}Error Handling Verification}{11}{subsection.6.6}%
+\contentsline {subsection}{\numberline {6.7}Graceful Shutdown}{11}{subsection.6.7}%
+\contentsline {section}{\numberline {7}Troubleshooting}{12}{section.7}%
+\contentsline {subsection}{\numberline {7.1}Compilation Issues}{12}{subsection.7.1}%
+\contentsline {paragraph}{1. Missing Libraries or Header Files.}{12}{subsection.7.1}%
+\contentsline {paragraph}{2. Undefined Reference Errors at Link Time.}{12}{lstnumber.-29.1}%
+\contentsline {subsection}{\numberline {7.2}Configuration and Startup Issues}{12}{subsection.7.2}%
+\contentsline {paragraph}{3. “Port Already in Use” Error.}{12}{subsection.7.2}%
+\contentsline {paragraph}{4. “Permission Denied” on Low Ports.}{13}{lstnumber.-33.2}%
+\contentsline {paragraph}{5. Missing or Invalid Document Root.}{13}{lstnumber.-35.1}%
+\contentsline {paragraph}{6. Invalid Configuration Entries.}{13}{lstnumber.-37.2}%
+\contentsline {subsection}{\numberline {7.3}Runtime and Concurrency Issues}{14}{subsection.7.3}%
+\contentsline {paragraph}{7. No Response to HTTP Requests.}{14}{subsection.7.3}%
+\contentsline {paragraph}{8. Interleaved or Corrupted Logs.}{14}{lstnumber.-41.1}%
+\contentsline {paragraph}{9. Shared Memory Not Released After Shutdown.}{14}{lstnumber.-42.3}%
+\contentsline {paragraph}{10. High CPU Usage or Slow Response.}{15}{lstnumber.-44.2}%
+\contentsline {subsection}{\numberline {7.4}Testing and Validation Problems}{15}{subsection.7.4}%
+\contentsline {paragraph}{11. Test Scripts Fail to Execute.}{15}{subsection.7.4}%
+\contentsline {paragraph}{12. Stress Test Hangs Indefinitely.}{15}{lstnumber.-47.2}%

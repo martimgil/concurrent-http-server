@@ -10,51 +10,134 @@
 \usepackage{listings}
 \usepackage{xcolor}
 \usepackage{float}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{enumitem}
+\usepackage{booktabs}
+\usepackage{parskip}
 
 % --- Page Configuration ---
-\geometry{margin=2.5cm}
+\geometry{margin=2.5cm, top=3cm, bottom=3cm}
+
+% --- Color Scheme (Standard Black/White) ---
+\definecolor{codegray}{gray}{0.95}
+
+% --- Hyperlink Configuration ---
+\hypersetup{
+    colorlinks=true,
+    linkcolor=black,
+    urlcolor=black,
+    citecolor=black,
+    pdftitle={User Manual - Concurrent HTTP Web Server},
+    pdfauthor={Martim Gil, Nuno Leite Faria}
+}
 
 % --- Code Style ---
-\definecolor{codegray}{rgb}{0.95,0.95,0.95}
 \lstset{
     backgroundcolor=\color{codegray},
     basicstyle=\ttfamily\small,
     breaklines=true,
     frame=single,
+    framerule=0.5pt,
+    rulecolor=\color{black},
     numbers=none,
-    captionpos=b
+    captionpos=b,
+    keywordstyle=\bfseries,
+    commentstyle=\itshape,
+    stringstyle=\ttfamily,
+    showstringspaces=false,
+    tabsize=4,
+    xleftmargin=1em,
+    xrightmargin=1em,
+    aboveskip=1em,
+    belowskip=1em
 }
 
-% --- Metadata ---
-\title{
-    \textbf{User Manual}\\
-    \large Concurrent HTTP Web Server
-}
-\author{
-    Martim Gil (ID: [XXXXX]) \\
-    Nuno Leite Faria (ID: [112994]) \\
-    \textit{Operating Systems - University of Aveiro}
-}
-\date{\today}
+% --- Header and Footer ---
+\setlength{\headheight}{14pt}
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\small\textit{Concurrent HTTP Web Server}}
+\fancyhead[R]{\small\textit{User Manual}}
+\fancyfoot[C]{\thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+\renewcommand{\footrulewidth}{0pt}
+
+% --- Section Styling ---
+\titleformat{\section}{\Large\bfseries}{\thesection}{1em}{}
+\titleformat{\subsection}{\large\bfseries}{\thesubsection}{1em}{}
+\titleformat{\subsubsection}{\normalsize\bfseries}{\thesubsubsection}{1em}{}
+
+% --- List Styling ---
+\setlist[itemize]{noitemsep, topsep=0.5em}
+\setlist[enumerate]{noitemsep, topsep=0.5em}
 
 \begin{document}
 
-\maketitle
+% =================================================================
+% TITLE PAGE
+% =================================================================
+\begin{titlepage}
+    \centering
+    
+    % --- DETI Logo ---
+    \vspace*{2cm}
+    \includegraphics[width=0.7\textwidth]{deti.png}
+    
+    \vspace{3cm}
+    
+    % --- Document Title ---
+    {\Huge\textbf{User Manual}}\\[0.5cm]
+    {\LARGE Concurrent HTTP Web Server}
+    
+    \vspace{1.5cm}
+    
+    % --- Decorative Line ---
+    \rule{0.6\textwidth}{0.5pt}
+    
+    \vspace{1.5cm}
+    
+    % --- Course Information ---
+    {\Large\textbf{Operating Systems}}\\[0.3cm]
+    {\large Academic Year 2025/2026}
+    
+    \vspace{2cm}
+    
+    % --- Authors ---
+    \begin{tabular}{cc}
+        \textbf{Martim Gil} & \textbf{Nuno Leite Faria} \\
+        Student ID: 124833 & Student ID: 112994 \\
+    \end{tabular}
+    
+    \vspace{1.5cm}
+    
+    % --- Supervisor ---
+    {\large Supervisor: Prof. Pedro Azevedo Fernandes}
+    
+    \vfill
+    
+    % --- Date ---
+    {\large \today}
+    
+\end{titlepage}
+
+% --- Table of Contents ---
 \tableofcontents
 \newpage
+
 
 % =================================================================
 % 1. INTRODUCTION
 % =================================================================
 \section{Introduction}
-This user manual provides guidance for installing, configuring, and operating the Concurrent HTTP Server developed for the Operating Systems coursework at the University of Aveiro.  
-The system is designed as a lightweight, multi-threaded web server capable of handling multiple simultaneous client connections efficiently while ensuring synchronization, reliability, and safe resource management.
+This user manual provides guidance for installing, configuring, and operating the Concurrent HTTP Server.
+The system is designed as a multi-threaded web server capable of handling multiple simultaneous client connections efficiently while ensuring synchronization, reliability, and safe resource management.
 
 The primary objective of the Concurrent HTTP Server is to deliver static web content—such as HTML pages, CSS stylesheets, and multimedia files—directly from the local \texttt{www/} directory to connected clients via the HTTP/1.0 protocol.  
 Internally, the server employs a hybrid process–thread model that combines interprocess communication (IPC), shared memory statistics tracking, and a thread pool for request handling.  
 This design allows the server to maintain high throughput and responsiveness under concurrent workloads without compromising stability.
 
-The manual is intended for end users, system administrators, and evaluators who wish to:
+The manual is intended for users who wish to:
 \begin{itemize}
   \item Build and launch the server from source code using the provided \texttt{Makefile}.
   \item Understand the directory structure, configuration files, and runtime behavior.
@@ -72,17 +155,6 @@ In summary, this manual serves as a comprehensive reference for both technical a
 \section{System Requirements}
 The Concurrent HTTP Server is designed to operate in a POSIX-compliant environment supporting multi-threading and interprocess communication.  
 This section outlines the minimum and recommended system requirements needed to build, execute, and evaluate the application successfully.
-
-\subsection{Hardware Requirements}
-The server is lightweight and optimized for laboratory-scale deployments, requiring only modest computational resources.  
-However, performance under heavy concurrency improves with multi-core processors and sufficient memory allocation.
-
-\begin{itemize}
-  \item \textbf{Processor:} Dual-core CPU or higher (recommended: Quad-core).
-  \item \textbf{Memory:} Minimum 512 MB RAM; recommended 2 GB or more for stress testing.
-  \item \textbf{Storage:} At least 100 MB of free disk space for compiled binaries, logs, and cached web content.
-  \item \textbf{Network:} Localhost (loopback) interface or Ethernet connection for HTTP testing.
-\end{itemize}
 
 \subsection{Software Requirements}
 The server and its utilities rely on standard POSIX libraries and tools commonly available on Unix-like operating systems.
@@ -119,10 +191,6 @@ All functional and concurrency tests were executed locally on both physical and 
 Running the server requires user-level permissions only.  
 Administrator privileges (\texttt{sudo}) are not required unless the user wishes to bind the server to a privileged port (below 1024).  
 For standard operation, the default configuration uses TCP port 8080.
-
-\subsection{Summary}
-The Concurrent HTTP Server can be compiled and executed on virtually any Unix-like system with POSIX support.  
-Its minimal dependency footprint allows it to run efficiently on low-resource machines while remaining fully compatible with modern multicore systems for performance benchmarking.
 
 % =================================================================
 % 3. COMPILATION
@@ -161,8 +229,8 @@ This target performs the following steps:
 Upon success, both executables are available in the \texttt{bin/} directory:
 \begin{verbatim}
 bin/
-├── webserver      → Main HTTP server binary
-└── stats_reader   → Shared memory monitoring utility
+|-- webserver      -> Main HTTP server binary
+`-- stats_reader   -> Shared memory monitoring utility
 \end{verbatim}
 
 \subsection{Running the Server}
@@ -231,11 +299,6 @@ make help
 \end{lstlisting}
 This command lists build, clean, test, and debug options with brief descriptions, ensuring that all project operations can be performed consistently from the command line.
 
-\subsection{Summary}
-The Makefile offers a complete and reproducible build environment for the concurrent HTTP server.  
-It automates every step—from dependency generation and executable linking to race detection and regression testing—thereby guaranteeing consistent behavior, easy debugging, and rapid verification throughout the project’s lifecycle.
-
-
 % =================================================================
 % 4. CONFIGURATION
 % =================================================================
@@ -275,7 +338,6 @@ All paths can be specified relative to the project root or as absolute filesyste
 \texttt{DOCUMENT\_ROOT} & www & Directory containing static web files served to clients (HTML, CSS, images, etc.). \\ \hline
 \texttt{NUM\_WORKERS} & 4 & Number of worker processes forked by the master. Each worker maintains an independent thread pool. \\ \hline
 \texttt{THREADS\_PER\_WORKER} & 10 & Number of threads created within each worker’s thread pool to handle concurrent requests. \\ \hline
-\texttt{MAX\_QUEUE\_SIZE} & 100 & Maximum number of pending client requests in the shared request buffer (bounded queue). \\ \hline
 \texttt{LOG\_FILE} & logs/server.log & Absolute or relative path to the server’s access log file. Log entries are synchronized across all workers using named semaphores. \\ \hline
 \texttt{CACHE\_SIZE\_MB} & 10 & Maximum memory (in MB) allocated for the LRU cache in each worker process. Cached entries are shared across threads within the same worker. \\ \hline
 \end{tabular}
@@ -324,10 +386,6 @@ make run
 \end{lstlisting}
 
 This approach ensures deterministic initialization and avoids inconsistencies during live configuration updates.
-
-\subsection{Summary}
-The \texttt{server.conf} file provides full control over network, concurrency, logging, and caching behavior.  
-Its human-readable syntax and safe default values make it easy to tune performance for different environments, from lightweight laboratory tests to high-load stress experiments.
 
 % =================================================================
 % 5. EXECUTION
@@ -497,10 +555,6 @@ No remaining entries should appear under the server’s process user.
 
 ---
 
-\subsection{Summary}
-These examples demonstrate how to interact with the Concurrent HTTP Server using standard tools such as \texttt{curl}, \texttt{tail}, and \texttt{ab}.  
-Through its modular configuration and shared memory statistics utilities, the server provides both simplicity for basic use and flexibility for detailed performance evaluation.
-% =================================================================
 % 7. TROUBLESHOOTING
 % =================================================================
 \section{Troubleshooting}
@@ -724,11 +778,6 @@ Thread pool exhaustion or blocked request queue due to oversized \texttt{MAX\_QU
 \end{itemize}
 
 ---
-
-\subsection{Summary}
-Most runtime issues are caused by incorrect configuration values, missing directories, or improperly terminated processes.  
-The server is designed to handle errors gracefully and report them clearly through both console output and the log file.  
-If persistent problems occur, enable debug mode for additional diagnostic information:
 \begin{lstlisting}[language=bash]
 make debug
 ./bin/webserver
