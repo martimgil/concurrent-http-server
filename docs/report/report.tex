@@ -12,6 +12,7 @@
 \usepackage{float}
 \usepackage{booktabs} % For nicer tables
 \usepackage{pgfplots} % Optional: For graphs directly in LaTeX
+\pgfplotsset{compat=1.18}
 
 % --- Page Configuration ---
 \geometry{margin=2.5cm}
@@ -38,7 +39,8 @@
     \textit{Operating Systems - University of Aveiro}
 }
 \date{\today}
-
+\begin{document}
+\sloppy
 \begin{document}
 
 \maketitle
@@ -571,8 +573,44 @@ The results verified that synchronization primitives functioned correctly under 
 % The project requirements ask for "performance analysis".
 
 \subsection{Test Environment}
-% Hardware used (CPU, RAM), OS.
+The performance evaluation was made on a machine with the following specifications:
 % Server configuration (N Workers, M Threads).
+The performance evalution was made on a machine with the following specifications:
+\begin{itemize}
+  \item \textbf{CPU:} Intel Core i7-13700H (14 cores, 20 threads, Up to  5.0GHz)
+  \item \textbf{GPU 0:} Integrated Intel Iris Xe Graphics
+  \item \textbf{GPU 1:} NVIDIA GeForce RTX 4050 Laptop GPU
+  \item \textbf{Disk:} 1TB NVMe SSD
+  \item \textbf{RAM:} 16 GB DDR5
+The server was configured with the following parameters in \texttt{server.conf}:
+\begin{itemize}
+  \item \textbf{Port:} 8080
+  \item \textbf{TIMEOUT\_SECONDS:} 30
+  \item \textbf{NUM\_WORKERS:} 4
+  \item \textbf{THREADS\_PER\_WORKER:} 10
+\end{itemize}
+
+\subsection{Results: Throughput}
+% Graph: Requests per Second vs Number of Concurrent Clients.
+% Ex: Test with 10, 50, 100, 500 clients.
+\begin{itemize}
+  \item \textbf{Port:} 8080
+  \item \textbf{TIMEOUT\_SECONDS:} 30
+  \item \textbf{NUM\_WORKERS:} 4
+  \item \textbf{THREADS\_PER\_WORKER:} 10
+\end{itemize}
+
+\subsection{Results: Throughput}
+% Graph: Requests per Second vs Number of Concurrent Clients.
+% Ex: Test with 10, 50, 100, 500 clients.
+\end{itemize}
+The server was configured with the following parameters in \texttt{server.conf}:
+```
+\begin{itemize}
+  \item \textbf{Port:} 8080
+  \item \textbf{TIMEOUT\_SECONDS:} 30
+  \item \textbf{NUM\_WORKERS:} 4
+  \item \textbf{THREADS\_PER\_WORKER:} 10
 
 \subsection{Results: Throughput}
 % Graph: Requests per Second vs Number of Concurrent Clients.
@@ -583,14 +621,25 @@ The results verified that synchronization primitives functioned correctly under 
 \begin{tabular}{|c|c|c|}
 \hline
 \textbf{Concurrency} & \textbf{Req/s (No Cache)} & \textbf{Req/s (With Cache)} \\ \hline
-10  & 1500 & 4000 \\ \hline
-100 & 2000 & 8500 \\ \hline
+10  & 24686.12 & 27754.49 \\ \hline
+100 & 23307.52 & 23467.68 \\ \hline
 \end{tabular}
 \caption{Throughput comparison with and without cache}
 \end{table}
 
 \subsection{Results: Latency}
-% Average response time.
+The following table presents the average latency per request (in milliseconds) measured under different concurrency levels.
+
+\begin{table}[H]
+\centering
+\begin{tabular}{|c|c|c|}
+\hline
+\textbf{Concurrency} & \textbf{Latency (No Cache)} & \textbf{Latency (With Cache)} \\ \hline
+10  & 0.419 ms & 0.399 ms \\ \hline
+100 & 4.534 ms & 4.239 ms \\ \hline
+\end{tabular}
+\caption{Average latency comparison with and without cache}
+\end{table}
 
 \subsection{Discussion of Results}
 % Interpretation: "Cache improved performance by 300%..."
