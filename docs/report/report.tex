@@ -297,20 +297,20 @@ This prevents memory leaks and ensures that all file descriptors and dynamically
 % ----------------------------------------------------------------------
 \section{Challenges and Solutions}
 % Critical section to show understanding of concurrency issues.
-The development of a concurrent HTTP server presented several challenges related to synchronization, communication, and system scalability.
-Designing an architecture that walks the fine line between thread-safety and efficiency required a balancing act of parallelism with data consistency, while ensuring proper cleanup and resource management in all executable scenarios.
-As such, this section aims to bring light to what were considered the key obstacles in the implementation of the solution we provided.
+The development of a concurrent HTTP server presented several challenges related to synchronization and interprocess communication.
+Designing a program with thread-safety and with data consistency, while making use of proper cleanup and resource management in all executable scenarios.
+Because of this, this section aims to bring light to what were considered the key obstacles in the implementation of the solution we provided.
 
 \subsection{Race Conditions}
 % Example: "We detected statistics were losing counts..."
 % Solution: "Implemented an exclusive semaphore for the stats struct."
-During the early stages of development, one of the most prominent concurrency issues encountered was the presence of \textbf{race conditions} in the shared statistics subsystem.  
+During the early stages of development, one of the most difficult concurrency issues encountered was the presence of \textbf{race conditions} in the shared statistics subsystem.  
 The \texttt{stats} structure, stored in a shared memory region, was updated concurrently by multiple worker threads each time a request was served.  
-Because these updates occurred without proper synchronization, simultaneous increments of counters such as \texttt{requests} and \texttt{bytes\_sent} occasionally overwrote each other’s values, resulting in lost counts and inconsistent statistics.
+Because these updates occurred without proper synchronization, simultaneous increments of counters such as \texttt{requests} and \texttt{bytes\_sent} overwrote each other’s values, resulting in lost counts and wrong statistics.
 
 \paragraph{Problem Observation.}
-The issue manifested during stress testing, where the total number of processed requests reported by \texttt{stats\_reader} was consistently lower than the number of actual HTTP requests completed by the server.  
-This discrepancy confirmed that concurrent updates to the same memory region were not atomic and were being interrupted by other threads before completion.
+The issue during stress testing, where the total number of processed requests reported by \texttt{stats\_reader} was consistently lower than the number of actual HTTP requests completed by the server.  
+This confirmed that concurrent updates to the same memory region were not atomic and were being interrupted by other threads before completion.
 
 \paragraph{Solution.}
 To ensure atomicity, an \textbf{exclusive binary semaphore} was introduced to protect all accesses to the shared \texttt{stats} structure.  
@@ -326,12 +326,12 @@ This confirmed that the synchronization strategy successfully enforced atomicity
 % Discussion on Valgrind usage.
 % Ensuring shared memory is cleaned (unlink) on shutdown (SIGINT).
 Memory management played a crucial role in the reliability and robustness of the server.  
-Because the system relies on dynamic memory allocation, shared memory segments, and synchronization primitives created at runtime, any mismanagement could result in persistent resource leaks or instability after repeated executions.
+Because the system relies on dynamic memory allocation, shared memory segments, and synchronization primitives created at runtime, any mismanagement could result in resource leaks or instability after repeated executions.
 
 \paragraph{Leak Detection with Valgrind.}
-Throughout development, the \textbf{Valgrind} analysis tool was extensively used to detect and diagnose memory leaks, invalid reads or writes, and unfreed heap allocations.  
+Throughout the development, the \textbf{Valgrind} analysis tool was used to detect and diagnose memory leaks, invalid reads or writes, and unfreed heap allocations.  
 Running the server under Valgrind with realistic workloads revealed a small number of unreleased buffers within the cache subsystem and unclosed file descriptors associated with the logging mechanism.  
-These issues were systematically corrected by ensuring that all dynamically allocated buffers are freed, all open files are closed, and all synchronization primitives are properly destroyed before process termination.
+These issues were corrected by guarantee that all dynamically allocated buffers are freed, all open files are closed, and all synchronization primitives are properly destroyed before process termination.
 
 \paragraph{Shared Memory and Semaphore Cleanup.}
 The server makes use of POSIX shared memory objects and named semaphores to enable interprocess communication between the main server and auxiliary tools such as \texttt{stats\_reader}.  
@@ -345,23 +345,17 @@ These routines perform the following actions:
 \end{itemize}
 
 \paragraph{Signal-Driven Resource Management.}
-To guarantee cleanup even in the event of user interruption, the master process installs custom signal handlers for \texttt{SIGINT} and \texttt{SIGTERM}.  
+To guarantee cleanup even in the case of user interruption, the master process installs custom signal handlers for \texttt{SIGINT} and \texttt{SIGTERM}.  
 When triggered, these handlers invoke a global \texttt{cleanup()} function that sequentially joins all worker threads, destroys synchronization objects, releases cache memory, and removes shared memory objects from the system.  
 This ensures a graceful shutdown sequence, preventing resource leakage even under abrupt termination scenarios.
 
 \paragraph{Verification and Stability.}
-Memory management played a crucial role in the reliability and robustness of the server.  
-Because the system relies on dynamic memory allocation, shared memory segments, and synchronization primitives created at runtime, any mismanagement could result in persistent resource leaks or instability after repeated executions.
-
-\paragraph{Leak Detection with Valgrind.}
-Throughout development, the \textbf{Valgrind} analysis tool was extensively used to detect and diagnose memory leaks, invalid reads or writes, and unfreed heap allocations.  
-Running the server under Valgrind with realistic workloads revealed a small number of unreleased buffers within the cache subsystem and unclosed file descriptors associated with the logging mechanism.  
-These issues were systematically corrected by ensuring that all dynamically allocated buffers are freed, all open files are closed, and all synchronization primitives are properly destroyed before process termination.
+Memory management played a crucial role, because the system relies on dynamic memory allocation, shared memory segments, and synchronization primitives created at runtime.
 
 \paragraph{Shared Memory and Semaphore Cleanup.}
-The server makes use of POSIX shared memory objects and named semaphores to enable interprocess communication between the main server and auxiliary tools such as \texttt{stats\_reader}.  
+The server uses POSIX shared memory objects and named semaphores to enable interprocess communication between the main server and auxiliary tools such as \texttt{stats\_reader}.  
 Improper shutdown or unexpected termination (\texttt{Ctrl+C}) initially left behind orphaned resources that persisted in the system, visible through \texttt{ipcs} or \texttt{ls /dev/shm}.  
-To address this, explicit cleanup routines were implemented in \texttt{src/shared\_mem.c} and \texttt{src/semaphores.c}.  
+To fix this, explicit cleanup routines were implemented in \texttt{src/shared\_mem.c} and \texttt{src/semaphores.c}.  
 These routines perform the following actions:
 \begin{itemize}
   \item Unlink all named semaphores using \texttt{sem\_unlink()};
@@ -371,8 +365,7 @@ These routines perform the following actions:
 
 \paragraph{Signal-Driven Resource Management.}
 To guarantee cleanup even in the event of user interruption, the master process installs custom signal handlers for \texttt{SIGINT} and \texttt{SIGTERM}.  
-When triggered, these handlers invoke a global \texttt{cleanup()} function that sequentially joins all worker threads, destroys synchronization objects, releases cache memory, and removes shared memory objects from the system.  
-This ensures a graceful shutdown sequence, preventing resource leakage even under abrupt termination scenarios.
+When triggered, these handlers invoke a global \texttt{cleanup()} function that joins all worker threads and execute a cleanup to destroy all objects and release all resources, which prevents resource leakage.
 
 \paragraph{Verification and Stability.}
 After the integration of the cleanup logic, repeated Valgrind analyses confirmed that all heap allocations were correctly released, with the final summary reporting:
@@ -380,18 +373,17 @@ After the integration of the cleanup logic, repeated Valgrind analyses confirmed
 == All heap blocks were freed -- no leaks are possible ==
 \end{verbatim}
 Additionally, post-execution checks using \texttt{ipcs -m} and \texttt{ipcs -s} verified that no shared memory segments or semaphores remained active after server shutdown.  
-These results demonstrate that the system’s memory management strategy is both sound and reliable, ensuring long-term stability and compatibility with operating system resource policies.
+
 
 \subsection{Log Synchronization}
 % The problem of interleaved log lines.
 % Implemented solution (local buffer or mutex).
-Another significant challenge identified during the development of the concurrent HTTP server was the occurrence of \textbf{interleaved log entries} in the system log file.  
-Because multiple worker threads perform logging operations simultaneously, concurrent calls to \texttt{fprintf()} occasionally resulted in overlapping text output, corrupted lines, or partial messages, making post-execution debugging and auditing difficult.
+Another challenge was the occurrence of interleaved log entries in the system log file, because of multiple worker threads perform logging operations simultaneously, concurrent calls to \texttt{fprintf()} resulted in overlapping text output, corrupted lines, or partial messages, making debugging difficult.
 
 \paragraph{Problem Analysis.}
 The logging subsystem, implemented in \texttt{src/logger.c}, originally allowed each worker thread to write directly to the shared log file without synchronization.  
-During concurrent request handling, multiple threads invoked \texttt{logger\_write()} almost simultaneously, causing their respective I/O streams to interfere.  
-Since standard C file I/O is not inherently atomic, different threads could write portions of separate log entries into the same buffer region, producing garbled output such as:
+During concurrent request handling, multiple threads invoked \texttt{logger\_write()} simultaneously, causing their respective I/O streams to interfere.  
+Since standard C file I/O is not inherently atomic, different threads could write portions of separate log entries into the same buffer region, producing output such as:
 \begin{verbatim}
 [Thread 2] Served file index.html [Thread 3] Client disconnected
 [Thread 5] Serv[Thread 4] Error 404: file not found
@@ -399,7 +391,7 @@ Since standard C file I/O is not inherently atomic, different threads could writ
 This problem not only compromised readability but also impeded accurate debugging and event tracing.
 
 \paragraph{Implemented Solution.}
-To ensure the integrity of log entries, a \textbf{mutual exclusion mechanism} was introduced around all file-writing operations.  
+To ensure the integrity of log entries, a mutual exclusion mechanism was introduced around all file-writing operations.  
 A \emph{binary semaphore} named \texttt{/ws\_log\_sem} is created during server initialization and shared among all threads.  
 Whenever a worker intends to write to the log, it executes a \texttt{semDown()} (wait) operation before writing and a \texttt{semUp()} (post) operation afterward, guaranteeing exclusive access to the log stream during the write.
 
@@ -415,30 +407,27 @@ The final logging sequence for each worker thread is as follows:
   \item Flush the stream with \texttt{fflush()} to ensure persistence.
   \item Release the semaphore using \texttt{semUp()}.
 \end{enumerate}
-This approach ensures that only one thread writes to the file at a time and that each log entry is complete and contiguous.
+This ensures that only one thread writes to the file at a time and that each log entry is complete.
 
 \paragraph{Verification.}
 Following the implementation of the synchronization mechanism, repeated stress tests involving dozens of concurrent clients confirmed that all log entries were well-formed, non-overlapping, and timestamped correctly.  
 Furthermore, log inspection tools and diff comparisons across multiple runs revealed identical, reproducible outputs under equivalent workloads, validating that the synchronization scheme effectively eliminated race conditions in the logging subsystem.
 
-In conclusion, the combination of a global binary semaphore for mutual exclusion and per-thread buffering provided a robust and efficient solution to the log interleaving problem, ensuring reliable and deterministic logging under concurrent workloads.
-
-
 \subsection{Zombies and Signals}
 % How SIGCHLD or waitpid was handled in Master to prevent zombies.
-During development, one critical aspect of maintaining process hygiene in the server was the prevention of \textbf{zombie processes}.  
+During development, one critical aspect of maintaining process hygiene in the server was the prevention of zombie processes.  
 A zombie process occurs when a child process terminates but its exit status remains uncollected by the parent, leaving a defunct entry in the system’s process table.  
 Although the concurrent HTTP server primarily relies on threads for parallelism, auxiliary processes such as the master and worker components, or other spawned utilities, can still generate zombies if not properly reaped.
 
 \paragraph{Problem Description.}
-Early test executions revealed lingering defunct processes after multiple start-and-stop cycles of the server.  
+Test executions revealed lingering defunct processes after multiple start-and-stop cycles of the server.  
 Inspection using the \texttt{ps -ef} and \texttt{top} commands showed entries in the \emph{Z} (zombie) state, indicating that terminated child processes had not been reaped by the master.  
 This occurred because no signal handler was initially configured to capture \texttt{SIGCHLD}, the signal sent to a parent when one of its children exits.
 
 \paragraph{Implemented Solution.}
-To prevent the accumulation of zombie processes, a dedicated signal handler for \texttt{SIGCHLD} was registered in the master process (see \texttt{src/master.c}).  
+To address the accumulation of zombie processes, a dedicated signal handler for \texttt{SIGCHLD} was registered in the master process (see \texttt{src/master.c}).  
 This handler performs a non-blocking call to \texttt{waitpid()} with the \texttt{WNOHANG} option, which immediately reaps any terminated child processes without interrupting the server’s main accept loop.  
-The implementation follows the canonical pattern:
+The implementation follows tis:
 
 \begin{verbatim}
 void sigchld_handler(int signo) {
@@ -446,7 +435,7 @@ void sigchld_handler(int signo) {
 }
 \end{verbatim}
 
-This ensures that all child processes are properly cleaned up as soon as they terminate, preventing accumulation of zombies and maintaining a clean process table.
+This ensures that all child processes are properly cleaned up as soon as they terminate, preventing accumulation of zombies.
 
 \paragraph{Graceful Shutdown Signals.}
 In addition to \texttt{SIGCHLD}, the master process also handles \texttt{SIGINT} and \texttt{SIGTERM} to ensure graceful server termination.  
@@ -456,17 +445,15 @@ When either of these signals is received, the signal handler triggers a global c
   \item Releases semaphores and shared memory objects.
   \item Calls \texttt{logger\_close()} and \texttt{cache\_destroy()} to release I/O and heap resources.
 \end{itemize}
-By installing these handlers during initialization, the server guarantees that even abrupt termination via keyboard interrupt (\texttt{Ctrl+C}) or system kill command results in full resource reclamation and no lingering processes.
+By installing these handlers during initialization, the server guarantees that abrupt termination via keyboard interrupt (\texttt{Ctrl+C}) or system kill command results in full resource cleanup.
 
 \paragraph{Verification.}
 To confirm correct signal handling and zombie prevention, repeated executions of the server under heavy load were followed by process table inspection using:
 \begin{verbatim}
 $ ps -ef | grep server
 \end{verbatim}
-No processes in the \texttt{Z} (zombie) state were observed after shutdown, and the system returned all allocated process slots to the kernel immediately.  
-These results demonstrate that the combination of \texttt{SIGCHLD} reaping and structured termination handlers effectively eliminates zombie processes and ensures consistent process hygiene in the concurrent server.
-
-In summary, proper handling of \texttt{SIGCHLD}, \texttt{SIGINT}, and \texttt{SIGTERM} signals guarantees that the server remains free of zombie processes and that all resources are correctly reclaimed during both normal and forced termination.
+No processes in the \texttt{Z} (zombie) state were observed after shutdown, and the system returned all allocated process slots to the system immediately.  
+These results demonstrate that the combination of \texttt{SIGCHLD} reaping and structured termination handlers effectively eliminates zombie processes and the cleanup process.
 
 % ----------------------------------------------------------------------
 % 4. Testing Methodology
