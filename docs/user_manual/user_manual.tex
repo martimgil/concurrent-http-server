@@ -334,15 +334,48 @@ All paths can be specified relative to the project root or as absolute filesyste
 \begin{tabular}{|l|l|p{8cm}|}
 \hline
 \textbf{Parameter} & \textbf{Example} & \textbf{Description} \\ \hline
-\texttt{PORT} & 8080 & TCP port on which the master process listens for incoming HTTP connections. Must be above 1024 for non-root users. \\ \hline
-\texttt{DOCUMENT\_ROOT} & www & Directory containing static web files served to clients (HTML, CSS, images, etc.). \\ \hline
-\texttt{NUM\_WORKERS} & 4 & Number of worker processes forked by the master. Each worker maintains an independent thread pool. \\ \hline
-\texttt{THREADS\_PER\_WORKER} & 10 & Number of threads created within each worker’s thread pool to handle concurrent requests. \\ \hline
-\texttt{LOG\_FILE} & logs/server.log & Absolute or relative path to the server’s access log file. Log entries are synchronized across all workers using named semaphores. \\ \hline
-\texttt{CACHE\_SIZE\_MB} & 10 & Maximum memory (in MB) allocated for the LRU cache in each worker process. Cached entries are shared across threads within the same worker. \\ \hline
+
+\texttt{PORT} & 8080 &
+TCP port on which the master process listens for incoming HTTP connections.  
+Must be greater than 1024 for non-root users. \\ \hline
+
+\texttt{TIMEOUT\_SECONDS} & 30 &
+Maximum duration (in seconds) that an idle client connection may remain open.  
+After this period, inactive connections are automatically closed to conserve resources. \\ \hline
+
+\texttt{DOCUMENT\_ROOT} & ./www &
+Directory containing the static web content (HTML, CSS, JavaScript, images, and other resources) served by the server.  
+Paths can be absolute or relative to the project root. \\ \hline
+
+\texttt{NUM\_WORKERS} & 4 &
+Number of worker processes forked by the master process.  
+Each worker manages an independent thread pool for request handling. \\ \hline
+
+\texttt{THREADS\_PER\_WORKER} & 10 &
+Number of threads created within each worker process.  
+Each thread handles one client connection at a time, allowing parallel request servicing. \\ \hline
+
+\texttt{MAX\_QUEUE\_SIZE} & 100 &
+Maximum number of pending client requests in the bounded task queue between the acceptor and worker threads.  
+Higher values increase tolerance to bursts of connections but may consume more memory. \\ \hline
+
+\texttt{CACHE\_SIZE\_MB} & 10 &
+Size (in megabytes) of the Least Recently Used (LRU) cache maintained by each worker.  
+Larger caches improve response times for frequently requested files at the cost of additional memory usage. \\ \hline
+
+\texttt{LOG\_FILE} & access.log &
+Path to the access log file where all client requests and system messages are recorded.  
+Writes are synchronized across processes using semaphores to avoid interleaved output. \\ \hline
+
+\texttt{LOG\_LEVEL} & INFO &
+Determines the verbosity of runtime logging.  
+Accepted values: \texttt{DEBUG}, \texttt{INFO}, \texttt{WARN}, and \texttt{ERROR}.  
+Higher levels reduce log volume and are suitable for production environments. \\ \hline
+
 \end{tabular}
-\caption{Configuration Parameters}
+\caption{Updated configuration parameters as defined in \texttt{server.conf}.}
 \end{table}
+
 
 \subsection{Runtime Behavior}
 When the server starts, the \texttt{master.c} process reads and applies these parameters before spawning worker processes.  
@@ -456,6 +489,7 @@ ls www/
 
 ---
 
+
 \subsection{Accessing from a Web Browser}
 After launching the server, open any browser and navigate to:
 \begin{verbatim}
@@ -488,12 +522,17 @@ These can be viewed using the monitoring utility:
 Typical output:
 \begin{lstlisting}
 === Server Statistics ===
-Active Workers: 4
-Total Requests: 512
-Cache Hits: 430
-Cache Misses: 82
-Total Bytes Served: 3.2 MB
+Total Requests=N
+Bytes Requests=X
+Status_200=Y
+Status_404=Z
+Status_500=A
+Active Connections=B
+Total_response_time_ms=C
+Avg_response_time_ms=D
 =========================
+
+*The letters correspond to variable numbers
 \end{lstlisting}
 
 Statistics are refreshed periodically (default: every 30 seconds).  
@@ -531,6 +570,61 @@ Expected response:
 \end{lstlisting}
 
 This confirms that the server correctly maps missing files to the predefined error template located in \texttt{www/errors/404.html}.
+
+% ======================================================================
+\subsection{Web Dashboard (Bonus Feature)}
+% ======================================================================
+
+The project includes an optional static dashboard, provided in the file
+\texttt{www/dashboard.html}. This page offers a lightweight browser-based
+interface for monitoring server activity and performance statistics.
+
+\paragraph{Accessing the Dashboard.}
+After starting the server, open any web browser and navigate to:
+\begin{verbatim}
+http://localhost:8080/dashboard.html
+\end{verbatim}
+The dashboard is served like any other static file under the directory
+defined by \texttt{DOCUMENT\_ROOT} in \texttt{server.conf}.  
+No additional configuration or ports are required.
+
+\paragraph{Contents and Functionality.}
+The dashboard page uses the shared stylesheet
+\texttt{www/style.css} and the JavaScript logic defined in
+\texttt{www/script.js} (and its corresponding TypeScript source
+\texttt{script.ts}).  
+It may display or periodically refresh basic metrics such as:
+\begin{itemize}
+  \item Total requests handled by the server.
+  \item Active workers and threads in operation.
+  \item Cache hit and miss ratios.
+  \item Current uptime or activity counters.
+\end{itemize}
+
+\paragraph{Troubleshooting.}
+\begin{itemize}
+  \item If the browser reports a \texttt{404 Not Found}, ensure that
+        \texttt{dashboard.html} exists inside the configured document root:
+        \begin{lstlisting}[language=bash]
+        ls www/ | grep dashboard.html
+        \end{lstlisting}
+  \item If the page shows no data, verify that any referenced statistics endpoint
+        (for example, \texttt{/api/stats}) is reachable:
+        \begin{lstlisting}[language=bash]
+        curl http://localhost:8080/api/stats
+        \end{lstlisting}
+  \item If changes to the page or scripts are not visible, clear the browser cache
+        or force a reload with \texttt{Ctrl + F5}.
+\end{itemize}
+
+\paragraph{Summary.}
+The Web Dashboard is an optional, static component intended to give users a
+simple graphical overview of the server’s current state.
+It is always accessible at:
+
+\begin{center}
+\textbf{\texttt{http://localhost:8080/dashboard.html}}
+\end{center}
 
 ---
 
