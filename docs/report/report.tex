@@ -1,59 +1,143 @@
 \documentclass[a4paper,12pt]{article}
 
-% --- Packages ---
+% --- Essential Packages ---
 \usepackage[utf8]{inputenc}
 \usepackage[T1]{fontenc}
-\usepackage[english]{babel} % Changed to English
-\usepackage{graphicx}
+\usepackage[english]{babel}
 \usepackage{geometry}
+\usepackage{graphicx}
 \usepackage{hyperref}
 \usepackage{listings}
 \usepackage{xcolor}
 \usepackage{float}
-\usepackage{booktabs} % For nicer tables
-\usepackage{pgfplots} % Optional: For graphs directly in LaTeX
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{enumitem}
+\usepackage{booktabs}
+\usepackage{parskip}
+\usepackage{tikz}
+\usepackage{pgfplots}
 \pgfplotsset{compat=1.18}
 
 % --- Page Configuration ---
-\geometry{margin=2.5cm}
+\geometry{margin=2.5cm, top=3cm, bottom=3cm}
 
-% --- Code Configuration ---
-\definecolor{codegray}{rgb}{0.95,0.95,0.95}
+% --- Color Scheme ---
+\definecolor{codegray}{gray}{0.95}
+
+% --- Hyperlink Configuration ---
+\hypersetup{
+    colorlinks=true,
+    linkcolor=black,
+    urlcolor=black,
+    citecolor=black,
+    pdftitle={Technical Report - Concurrent HTTP Web Server},
+    pdfauthor={Martim Gil, Nuno Leite Faria}
+}
+
+% --- Code Style ---
 \lstset{
     backgroundcolor=\color{codegray},
     basicstyle=\ttfamily\small,
     breaklines=true,
     frame=single,
+    framerule=0.5pt,
+    rulecolor=\color{black},
     numbers=left,
+    numberstyle=\tiny,
+    captionpos=b,
+    keywordstyle=\bfseries,
+    commentstyle=\itshape,
+    stringstyle=\ttfamily,
+    showstringspaces=false,
+    tabsize=4,
+    xleftmargin=1em,
+    xrightmargin=1em,
+    aboveskip=1em,
+    belowskip=1em,
     language=C
 }
 
-% --- Metadata ---
-\title{
-    \textbf{Technical Report}\\
-    \large Multi-Threaded Web Server with IPC and Semaphores
-}
-\author{
-    Martim Gil (ID: [124833]) \\
-    Nuno Leite Faria (ID: 112994) \\
-    \textit{Operating Systems - University of Aveiro}
-}
-\date{\today}
-\begin{document}
-\sloppy
+% --- Header and Footer ---
+\setlength{\headheight}{14pt}
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\small\textit{Concurrent HTTP Web Server}}
+\fancyhead[R]{\small\textit{Technical Report}}
+\fancyfoot[C]{\thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+\renewcommand{\footrulewidth}{0pt}
 
-\maketitle
+% --- Section Styling ---
+\titleformat{\section}{\Large\bfseries}{\thesection}{1em}{}
+\titleformat{\subsection}{\large\bfseries}{\thesubsection}{1em}{}
+\titleformat{\subsubsection}{\normalsize\bfseries}{\thesubsubsection}{1em}{}
+
+% --- List Styling ---
+\setlist[itemize]{noitemsep, topsep=0.5em}
+\setlist[enumerate]{noitemsep, topsep=0.5em}
+
+\begin{document}
+
+% =================================================================
+% TITLE PAGE
+% =================================================================
+\begin{titlepage}
+    \centering
+    
+    % --- DETI Logo ---
+    \vspace*{2cm}
+    \includegraphics[width=0.7\textwidth]{deti.png}
+    
+    \vspace{3cm}
+    
+    % --- Document Title ---
+    {\Huge\textbf{Technical Report}}\\[0.5cm]
+    {\LARGE Concurrent HTTP Web Server}
+    
+    \vspace{1.5cm}
+    
+    % --- Decorative Line ---
+    \rule{0.6\textwidth}{0.5pt}
+    
+    \vspace{1.5cm}
+    
+    % --- Course Information ---
+    {\Large\textbf{Operating Systems}}\\[0.3cm]
+    {\large Academic Year 2024/2025}
+    
+    \vspace{2cm}
+    
+    % --- Authors ---
+    \begin{tabular}{cc}
+        \textbf{Martim Gil} & \textbf{Nuno Leite Faria} \\
+        Student ID: 124833 & Student ID: 112994 \\
+    \end{tabular}
+    
+    \vspace{1.5cm}
+    
+    % --- Supervisor ---
+    {\large Supervisor: Prof. Pedro Azevedo Fernandes}
+    
+    \vfill
+    
+    % --- Date ---
+    {\large \today}
+    
+\end{titlepage}
+
+% --- Abstract ---
 \begin{abstract}
-    This document outlines the creation and execution of a concurrent HTTP server built in C for the Operating Systems course at the University of Aveiro.
+This document outlines the creation and execution of a concurrent HTTP server built in C for the Operating Systems course at the University of Aveiro.
 
 The primary purpose of the project was to create a system that could effectively manage numerous client requests at the same time using a combined process–thread architecture.
 
 The system incorporates sophisticated synchronization and interprocess communication methods, specifically POSIX semaphores and shared memory, guaranteeing consistency and mutual exclusion during access to shared resources. Extra modules were added for safe concurrent logging, file caching, and live statistics tracking.
 
-The suggested solution underwent an extensive array of functional, concurrency, and stress evaluations. The results obtained show the reliability, scalability, and accuracy of the synchronization mechanisms, along with the consistent performance of the system under high workloads
-
+The suggested solution underwent an extensive array of functional, concurrency, and stress evaluations. The results obtained show the reliability, scalability, and accuracy of the synchronization mechanisms, along with the consistent performance of the system under high workloads.
 \end{abstract}
 
+% --- Table of Contents ---
 \tableofcontents
 \newpage
 
@@ -567,21 +651,60 @@ We used the following server configuration for the tests:
 \subsection{Results: Throughput}
 % Graph: Requests per Second vs Number of Concurrent Clients.
 % Ex: Test with 10, 50, 100, 500 clients.
-% ...existing code...
 
 \begin{table}[H]
 \centering
 \begin{tabular}{|c|c|c|}
 \hline
-	textbf{Concurrency} & \textbf{Req/s (No Cache)} & \textbf{Req/s (With Cache)} \\ \hline
-10  & 24686.12 & 27754.49 \\ \hline
-50 & 23890.45 & 25012.33 \\ \hline
-100 & 23307.52 & 23467.68 \\ \hline
-500 & 22015.78 & 22534.12 \\ \hline
-1000 & 23307.52 & 23467.68 \\ \hline
+\textbf{Concurrency} & \textbf{Req/s (No Keep-Alive)} & \textbf{Req/s (With Keep-Alive)} \\ \hline
+10  & 31948.41 & 21994.49 \\ \hline
+50 & 31971.78 & 20937.88 \\ \hline
+100 & 31735.84 & 21391.65 \\ \hline
+500 & 26778.31 & 19577.23 \\ \hline
+1000 & 21530.65 & 19171.07 \\ \hline
 \end{tabular}
-\caption{Throughput comparison with and without cache}
+\caption{Throughput comparison: requests per second under different concurrency levels}
 \end{table}
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}
+\begin{axis}[
+    width=12cm,
+    height=8cm,
+    xlabel={Concurrency Level},
+    ylabel={Requests per Second (Req/s)},
+    xmode=log,
+    log basis x={10},
+    xtick={10,50,100,500,1000},
+    xticklabels={10,50,100,500,1000},
+    legend pos=north east,
+    grid=both,
+    grid style={line width=.1pt, draw=gray!20},
+    major grid style={line width=.2pt,draw=gray!50},
+    title={Throughput vs Concurrency Level}
+]
+\addplot[color=blue,mark=*,thick] coordinates {
+    (10, 31948.41)
+    (50, 31971.78)
+    (100, 31735.84)
+    (500, 26778.31)
+    (1000, 21530.65)
+};
+\addlegendentry{No Keep-Alive}
+
+\addplot[color=red,mark=square*,thick,dashed] coordinates {
+    (10, 21994.49)
+    (50, 20937.88)
+    (100, 21391.65)
+    (500, 19577.23)
+    (1000, 19171.07)
+};
+\addlegendentry{With Keep-Alive}
+\end{axis}
+\end{tikzpicture}
+\caption{Throughput performance comparison across different concurrency levels}
+\end{figure}
 
 \subsection{Results: Latency}
 The following table presents the average latency per request (in milliseconds) measured under different concurrency levels.
@@ -590,19 +713,68 @@ The following table presents the average latency per request (in milliseconds) m
 \centering
 \begin{tabular}{|c|c|c|}
 \hline
-	extbf{Concurrency} & \textbf{Latency (No Cache)} & \textbf{Latency (With Cache)} \\ \hline
-10  & 0.419 ms & 0.399 ms \\ \hline
-50 & 2.105 ms & 1.987 ms \\ \hline
-100 & 4.534 ms & 4.239 ms \\ \hline
-500 & 22.678 ms & 21.345 ms \\ \hline
-1000 & 45.123 ms & 42.876 ms \\ \hline
+\textbf{Concurrency} & \textbf{Latency (No Keep-Alive)} & \textbf{Latency (With Keep-Alive)} \\ \hline
+10  & 0.313 ms & 0.455 ms \\ \hline
+50 & 1.564 ms & 2.388 ms \\ \hline
+100 & 3.151 ms & 4.675 ms \\ \hline
+500 & 18.672 ms & 25.540 ms \\ \hline
+1000 & 46.445 ms & 52.162 ms \\ \hline
 \end{tabular}
-\caption{Average latency comparison with and without cache}
+\caption{Average latency comparison under different concurrency levels}
 \end{table}
 
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}
+\begin{axis}[
+    width=12cm,
+    height=8cm,
+    xlabel={Concurrency Level},
+    ylabel={Average Latency (ms)},
+    xmode=log,
+    log basis x={10},
+    xtick={10,50,100,500,1000},
+    xticklabels={10,50,100,500,1000},
+    legend pos=north west,
+    grid=both,
+    grid style={line width=.1pt, draw=gray!20},
+    major grid style={line width=.2pt,draw=gray!50},
+    title={Latency vs Concurrency Level}
+]
+\addplot[color=blue,mark=*,thick] coordinates {
+    (10, 0.313)
+    (50, 1.564)
+    (100, 3.151)
+    (500, 18.672)
+    (1000, 46.445)
+};
+\addlegendentry{No Keep-Alive}
+
+\addplot[color=red,mark=square*,thick,dashed] coordinates {
+    (10, 0.455)
+    (50, 2.388)
+    (100, 4.675)
+    (500, 25.540)
+    (1000, 52.162)
+};
+\addlegendentry{With Keep-Alive}
+\end{axis}
+\end{tikzpicture}
+\caption{Latency performance comparison across different concurrency levels}
+\end{figure}
+
 \subsection{Discussion of Results}
-% Interpretation: "Cache improved performance by 300%..."
-% "The main bottleneck appears to be log writing..."
+
+\paragraph{Throughput Analysis.}
+The server demonstrates a good performance, reaching over 31,000 requests per second at low concurrency levels (10-100 concurrent clients) without keep-alive connections.
+
+As concurrency increases beyond 500 clients, throughput gradually decreases because of switching overhead and queue contention. 
+
+\paragraph{Latency Behavior.}
+Latency scales approximately linearly with concurrency, which is expected behavior for a queuing system. At low concurrency (10 clients), the average response time is under 0.5ms, even at concurrency levels (1000 clients), latency remains under 55ms.
+
+\paragraph{Keep-Alive Trade-offs.}
+Interestingly, the benchmarks show that non-keep-alive connections achieve higher throughput in these tests. This is because Apache Bench with keep-alive (-k flag) maintains persistent connections, which can lead to head-of-line blocking in our architecture.
 
 % ----------------------------------------------------------------------
 % 6. Conclusion

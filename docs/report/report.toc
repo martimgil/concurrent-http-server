@@ -1,63 +1,66 @@
 \babel@toc {english}{}\relax 
-\contentsline {section}{\numberline {1}Introduction}{3}{section.1}%
-\contentsline {section}{\numberline {2}Implementation Details}{3}{section.2}%
-\contentsline {subsection}{\numberline {2.1}System Architecture}{4}{subsection.2.1}%
-\contentsline {subsection}{\numberline {2.2}Process and Thread Management}{5}{subsection.2.2}%
-\contentsline {paragraph}{Thread Pool Initialization.}{5}{section*.2}%
-\contentsline {paragraph}{Task Scheduling.}{5}{section*.3}%
-\contentsline {paragraph}{Worker Thread Execution.}{5}{section*.4}%
-\contentsline {paragraph}{Synchronization and Graceful Shutdown.}{6}{section*.5}%
-\contentsline {subsection}{\numberline {2.3}Synchronization and IPC}{6}{subsection.2.3}%
-\contentsline {paragraph}{Semaphore Abstraction.}{6}{section*.6}%
-\contentsline {paragraph}{Producer--Consumer Coordination.}{6}{section*.7}%
-\contentsline {paragraph}{Shared Statistics and Atomicity.}{7}{section*.8}%
-\contentsline {paragraph}{Mutual Exclusion in Shared Logging.}{7}{section*.9}%
-\contentsline {paragraph}{Synchronization Robustness.}{7}{section*.10}%
-\contentsline {subsection}{\numberline {2.4}Resource Management (Cache and Files)}{7}{subsection.2.4}%
-\contentsline {paragraph}{Cache Architecture.}{7}{section*.11}%
-\contentsline {paragraph}{LRU Replacement Policy.}{7}{section*.12}%
-\contentsline {paragraph}{Reader--Writer Locking.}{8}{section*.13}%
-\contentsline {paragraph}{File Loading and Caching Workflow.}{8}{section*.14}%
-\contentsline {paragraph}{Cache Coherency and Statistics.}{8}{section*.15}%
-\contentsline {paragraph}{Resource Cleanup.}{8}{section*.16}%
-\contentsline {subsection}{\numberline {2.5}HTTP Processing}{8}{subsection.2.5}%
-\contentsline {section}{\numberline {3}Challenges and Solutions}{8}{section.3}%
-\contentsline {subsection}{\numberline {3.1}Race Conditions}{9}{subsection.3.1}%
-\contentsline {paragraph}{Problem Observation.}{9}{section*.17}%
-\contentsline {paragraph}{Solution.}{9}{section*.18}%
-\contentsline {paragraph}{Verification.}{9}{section*.19}%
-\contentsline {subsection}{\numberline {3.2}Memory Management and Leaks}{9}{subsection.3.2}%
-\contentsline {paragraph}{Leak Detection with Valgrind.}{9}{section*.20}%
-\contentsline {paragraph}{Shared Memory and Semaphore Cleanup.}{9}{section*.21}%
-\contentsline {paragraph}{Signal-Driven Resource Management.}{10}{section*.22}%
-\contentsline {paragraph}{Verification and Stability.}{10}{section*.23}%
-\contentsline {paragraph}{Shared Memory and Semaphore Cleanup.}{10}{section*.24}%
-\contentsline {paragraph}{Signal-Driven Resource Management.}{10}{section*.25}%
-\contentsline {paragraph}{Verification and Stability.}{10}{section*.26}%
-\contentsline {subsection}{\numberline {3.3}Log Synchronization}{11}{subsection.3.3}%
-\contentsline {paragraph}{Problem Analysis.}{11}{section*.27}%
-\contentsline {paragraph}{Implemented Solution.}{11}{section*.28}%
-\contentsline {paragraph}{Example Implementation.}{11}{section*.29}%
-\contentsline {paragraph}{Verification.}{11}{section*.30}%
-\contentsline {subsection}{\numberline {3.4}Zombies and Signals}{12}{subsection.3.4}%
-\contentsline {paragraph}{Problem Description.}{12}{section*.31}%
-\contentsline {paragraph}{Implemented Solution.}{12}{section*.32}%
-\contentsline {paragraph}{Graceful Shutdown Signals.}{12}{section*.33}%
-\contentsline {paragraph}{Verification.}{12}{section*.34}%
-\contentsline {section}{\numberline {4}Testing Methodology}{13}{section.4}%
-\contentsline {subsection}{\numberline {4.1}Functional Tests}{13}{subsection.4.1}%
-\contentsline {paragraph}{HTTP Response Validation.}{13}{section*.35}%
-\contentsline {paragraph}{Automated Makefile Integration.}{13}{section*.36}%
-\contentsline {paragraph}{Verification of MIME Type Handling.}{13}{section*.37}%
-\contentsline {paragraph}{Result Summary.}{13}{section*.38}%
+\contentsline {section}{\numberline {1}Introduction}{2}{section.1}%
+\contentsline {section}{\numberline {2}Implementation Details}{2}{section.2}%
+\contentsline {subsection}{\numberline {2.1}System Architecture}{3}{subsection.2.1}%
+\contentsline {subsection}{\numberline {2.2}Process and Thread Management}{4}{subsection.2.2}%
+\contentsline {paragraph}{Thread Pool Initialization.}{4}{subsection.2.2}%
+\contentsline {paragraph}{Task Scheduling.}{4}{subsection.2.2}%
+\contentsline {paragraph}{Worker Thread Execution.}{4}{subsection.2.2}%
+\contentsline {paragraph}{Synchronization and Graceful Shutdown.}{5}{Item.5}%
+\contentsline {subsection}{\numberline {2.3}Synchronization and IPC}{5}{subsection.2.3}%
+\contentsline {paragraph}{Semaphore Abstraction.}{5}{subsection.2.3}%
+\contentsline {paragraph}{Producer--Consumer Coordination.}{5}{subsection.2.3}%
+\contentsline {paragraph}{Shared Statistics and Atomicity.}{5}{subsection.2.3}%
+\contentsline {paragraph}{Mutual Exclusion in Shared Logging.}{6}{subsection.2.3}%
+\contentsline {paragraph}{Synchronization Robustness.}{6}{subsection.2.3}%
+\contentsline {subsection}{\numberline {2.4}Resource Management (Cache and Files)}{6}{subsection.2.4}%
+\contentsline {paragraph}{Cache Architecture.}{6}{subsection.2.4}%
+\contentsline {paragraph}{LRU Replacement Policy.}{6}{subsection.2.4}%
+\contentsline {paragraph}{Reader--Writer Locking.}{7}{subsection.2.4}%
+\contentsline {paragraph}{File Loading and Caching Workflow.}{7}{subsection.2.4}%
+\contentsline {paragraph}{Cache Coherency and Statistics.}{7}{Item.9}%
+\contentsline {paragraph}{Resource Cleanup.}{7}{Item.9}%
+\contentsline {subsection}{\numberline {2.5}HTTP Processing}{7}{subsection.2.5}%
+\contentsline {section}{\numberline {3}Challenges and Solutions}{7}{section.3}%
+\contentsline {subsection}{\numberline {3.1}Race Conditions}{8}{subsection.3.1}%
+\contentsline {paragraph}{Problem Observation.}{8}{subsection.3.1}%
+\contentsline {paragraph}{Solution.}{8}{subsection.3.1}%
+\contentsline {paragraph}{Verification.}{8}{subsection.3.1}%
+\contentsline {subsection}{\numberline {3.2}Memory Management and Leaks}{8}{subsection.3.2}%
+\contentsline {paragraph}{Leak Detection with Valgrind.}{8}{subsection.3.2}%
+\contentsline {paragraph}{Shared Memory and Semaphore Cleanup.}{8}{subsection.3.2}%
+\contentsline {paragraph}{Signal-Driven Resource Management.}{9}{subsection.3.2}%
+\contentsline {paragraph}{Verification and Stability.}{9}{subsection.3.2}%
+\contentsline {paragraph}{Shared Memory and Semaphore Cleanup.}{9}{subsection.3.2}%
+\contentsline {paragraph}{Signal-Driven Resource Management.}{9}{subsection.3.2}%
+\contentsline {paragraph}{Verification and Stability.}{9}{subsection.3.2}%
+\contentsline {subsection}{\numberline {3.3}Log Synchronization}{10}{subsection.3.3}%
+\contentsline {paragraph}{Problem Analysis.}{10}{subsection.3.3}%
+\contentsline {paragraph}{Implemented Solution.}{10}{subsection.3.3}%
+\contentsline {paragraph}{Example Implementation.}{10}{subsection.3.3}%
+\contentsline {paragraph}{Verification.}{11}{Item.14}%
+\contentsline {subsection}{\numberline {3.4}Zombies and Signals}{11}{subsection.3.4}%
+\contentsline {paragraph}{Problem Description.}{11}{subsection.3.4}%
+\contentsline {paragraph}{Implemented Solution.}{11}{subsection.3.4}%
+\contentsline {paragraph}{Graceful Shutdown Signals.}{11}{subsection.3.4}%
+\contentsline {paragraph}{Verification.}{12}{subsection.3.4}%
+\contentsline {section}{\numberline {4}Testing Methodology}{12}{section.4}%
+\contentsline {subsection}{\numberline {4.1}Functional Tests}{12}{subsection.4.1}%
+\contentsline {paragraph}{HTTP Response Validation.}{12}{subsection.4.1}%
+\contentsline {paragraph}{Automated Makefile Integration.}{12}{subsection.4.1}%
+\contentsline {paragraph}{Verification of MIME Type Handling.}{12}{subsection.4.1}%
+\contentsline {paragraph}{Result Summary.}{13}{subsection.4.1}%
 \contentsline {subsection}{\numberline {4.2}Concurrency and Stress Tests}{13}{subsection.4.2}%
-\contentsline {paragraph}{Automated Concurrency Validation.}{14}{section*.39}%
-\contentsline {paragraph}{Load Testing with Apache Bench.}{14}{section*.40}%
-\contentsline {paragraph}{Race Detection with Helgrind and ThreadSanitizer.}{14}{section*.41}%
-\contentsline {paragraph}{Stress and Stability Evaluation.}{14}{section*.42}%
+\contentsline {paragraph}{Automated Concurrency Validation.}{13}{subsection.4.2}%
+\contentsline {paragraph}{Load Testing with Apache Bench.}{13}{subsection.4.2}%
+\contentsline {paragraph}{Race Detection with Helgrind and ThreadSanitizer.}{13}{subsection.4.2}%
+\contentsline {paragraph}{Stress and Stability Evaluation.}{13}{subsection.4.2}%
 \contentsline {section}{\numberline {5}Performance Analysis}{14}{section.5}%
 \contentsline {subsection}{\numberline {5.1}Test Environment}{14}{subsection.5.1}%
-\contentsline {subsection}{\numberline {5.2}Results: Throughput}{15}{subsection.5.2}%
+\contentsline {subsection}{\numberline {5.2}Results: Throughput}{14}{subsection.5.2}%
 \contentsline {subsection}{\numberline {5.3}Results: Latency}{15}{subsection.5.3}%
-\contentsline {subsection}{\numberline {5.4}Discussion of Results}{15}{subsection.5.4}%
-\contentsline {section}{\numberline {6}Conclusion}{15}{section.6}%
+\contentsline {subsection}{\numberline {5.4}Discussion of Results}{16}{subsection.5.4}%
+\contentsline {paragraph}{Throughput Analysis.}{16}{subsection.5.4}%
+\contentsline {paragraph}{Latency Behavior.}{16}{subsection.5.4}%
+\contentsline {paragraph}{Keep-Alive Trade-offs.}{16}{subsection.5.4}%
+\contentsline {section}{\numberline {6}Conclusion}{16}{section.6}%
