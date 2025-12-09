@@ -159,11 +159,9 @@ The architecture of the system is modularly designed, ensuring that various comp
 % ----------------------------------------------------------------------
 \section{Implementation Details}
 
-The concurrent web server was implemented entirely in the C programming language using POSIX system calls for process management, thread creation, synchronization, and interprocess communication (IPC).  
+The implementation have a modular architecture in which each subsystem is represented by a dedicated source file or pair of header and implementation files under the \texttt{src/} directory.  
 
-The implementation follows a modular architecture in which each subsystem corresponds to a dedicated source file or pair of header and implementation files under the \texttt{src/} directory.  
-
-This structure promotes reusability, maintainability, and clear separation of concerns between the networking layer, synchronization mechanisms, and data management components.
+This structure enhances reusability, maintainability, and clear separation of concerns between the networking layer, synchronization mechanisms, and data management components.
 
 The Diagram below shows the structure:
 
@@ -223,10 +221,10 @@ The Diagram below shows the structure:
 
 \subsection{System Architecture}
 
-At a high level, the project consists of three main execution entities: the \textbf{master process}, the \textbf{worker threads}, and the \textbf{auxiliary tools}.  
+This project is made of three main execution entities: the \textbf{master process}, the \textbf{worker threads}, and the \textbf{auxiliary tools}.  
 The master process is responsible for system initialization, socket setup, configuration parsing, and coordination of shared resources.  
-Each worker thread, managed by a thread pool, handles an individual client connection.  
-Auxiliary programs, such as \texttt{stats\_reader}, access the server's shared memory region to retrieve runtime statistics without interfering with normal operation.
+Each worker thread, which is managed by a thread pool, is tasked with handling a specific client connection.  
+Auxiliary programs, such as \texttt{stats\_reader}, interact with  the server's shared memory region to show runtime statistics without interfering with normal operation.
 
 The core modules are summarized below:
 
@@ -251,7 +249,7 @@ Once the server started, the \texttt{master} process enters a blocking loop wher
 For each connection that is accepted, the corresponding file descriptor is packaged as a task and submitted to the thread pool by invoking the function \texttt{thread\_pool\_add\_task()}.  
 
 \paragraph{Thread Pool Initialization.}
-The thread pool, implemented in \texttt{src/thread\_pool.c}, is initialized with a fixed number of worker threads determined by the configuration file (\texttt{server.conf}).  
+The thread pool, located in \texttt{src/thread\_pool.c}, is initialized with a fixed number of worker threads determined by the configuration file (\texttt{server.conf}).  
 Each thread is created at startup using the POSIX \texttt{pthread\_create()} function and executes a continuous loop defined in the \texttt{thread\_worker()}.  
 At the start, all threads enter a waiting state, blocked on a condition variable until new work becomes available in the shared task queue.
 
