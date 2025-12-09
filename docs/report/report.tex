@@ -434,18 +434,6 @@ This ensures a graceful shutdown sequence, preventing resource leakage even unde
 
 \paragraph{Verification and Stability.}
 Memory management played a crucial role, because the system relies on dynamic memory allocation, shared memory segments, and synchronization primitives created at runtime.
-
-\paragraph{Shared Memory and Semaphore Cleanup.}
-The server uses POSIX shared memory objects and named semaphores to enable interprocess communication between the main server and auxiliary tools such as \texttt{stats\_reader}.  
-Improper shutdown or unexpected termination (\texttt{Ctrl+C}) initially left behind orphaned resources that persisted in the system, visible through \texttt{ipcs} or \texttt{ls /dev/shm}.  
-To fix this, explicit cleanup routines were implemented in \texttt{src/shared\_mem.c} and \texttt{src/semaphores.c}.  
-These routines perform the following actions:
-\begin{itemize}
-  \item Unlink all named semaphores using \texttt{sem\_unlink()};
-  \item Unmap and close the shared memory segment via \texttt{munmap()} and \texttt{shm\_unlink()};
-  \item Free dynamically allocated memory structures associated with cache entries and statistics.
-\end{itemize}
-
 \paragraph{Signal-Driven Resource Management.}
 To guarantee cleanup even in the event of user interruption, the master process installs custom signal handlers for \texttt{SIGINT} and \texttt{SIGTERM}.  
 When triggered, these handlers invoke a global \texttt{cleanup()} function that joins all worker threads and execute a cleanup to destroy all objects and release all resources, which prevents resource leakage.
