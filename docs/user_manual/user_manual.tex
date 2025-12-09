@@ -160,7 +160,7 @@ This section outlines the minimum and recommended system requirements needed to 
 The server and its utilities rely on standard POSIX libraries and tools commonly available on Unix-like operating systems.
 
 \begin{itemize}
-  \item \textbf{Operating System:} Linux (Ubuntu, Fedora, or equivalent) or any POSIX-compliant system (e.g., macOS, FreeBSD).
+  \item \textbf{Operating System:} Linux or any POSIX-compliant system.
   \item \textbf{Compiler:} GCC version 9.0 or higher (tested with GCC 13).
   \item \textbf{Build System:} GNU \texttt{make} utility for automated compilation and testing.
   \item \textbf{Threading Support:} POSIX Threads (pthreads) library.
@@ -197,7 +197,6 @@ For standard operation, the default configuration uses TCP port 8080.
 % =================================================================
 \section{Compilation}
 The Concurrent HTTP Server project is built using a GNU \texttt{Makefile} that automates compilation, linking, and testing tasks.  
-The Makefile defines a consistent build process that ensures correct dependency tracking, multi-threaded linkage, and reproducible results across all supported environments.  
 All compilation rules are compatible with POSIX systems using the \texttt{gcc} compiler and the GNU \texttt{make} utility.
 
 \subsection{Build System Overview}
@@ -226,7 +225,8 @@ This target performs the following steps:
   \item Builds the auxiliary utility \texttt{bin/stats\_reader}.
 \end{itemize}
 
-Upon success, both executables are available in the \texttt{bin/} directory:
+On success, both executables are available in the \texttt{bin/} directory:
+
 \begin{verbatim}
 bin/
 |-- webserver      -> Main HTTP server binary

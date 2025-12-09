@@ -128,13 +128,14 @@
 
 % --- Abstract ---
 \begin{abstract}
-This document outlines the creation and execution of a concurrent HTTP server built in C for the Operating Systems course at the University of Aveiro.
+This document details the development of a concurrent HTTP server built in C for the Operating Systems course at the University of Aveiro.
 
-The primary purpose of the project was to create a system that could effectively manage numerous client requests at the same time using a combined process–thread architecture.
+The main goal of the project was to build a system capable of manage numerous client requests at the same time using a combined process–thread architecture.
 
-The system incorporates sophisticated synchronization and interprocess communication methods, specifically POSIX semaphores and shared memory, guaranteeing consistency and mutual exclusion during access to shared resources. Extra modules were added for safe concurrent logging, file caching, and live statistics tracking.
+The system utilizes synchronization and interprocess communication methods, particulary POSIX semaphores and shared memory. These elements ensure consistency and mutual exclusion during access to shared resources. 
+Extra modules were added for safe concurrent logging, file caching, and live statistics tracking.
 
-The suggested solution underwent an extensive array of functional, concurrency, and stress evaluations. The results obtained show the reliability, scalability, and accuracy of the synchronization mechanisms, along with the consistent performance of the system under high workloads.
+The results highlight the system's reliability, scalability, and precision in synchronization mechanisms, as well as its stable performance even under heavy workloads.
 \end{abstract}
 
 % --- Table of Contents ---
@@ -146,12 +147,12 @@ The suggested solution underwent an extensive array of functional, concurrency, 
 % ----------------------------------------------------------------------
 \section{Introduction}
 
-Creating concurrent servers is among the most effective and demonstrative uses of synchronization, inter-process communication, and thread management concepts explored in operating systems.
+Building concurrent servers stands the most effective and demonstrative uses of synchronization, inter-process communication, and thread management concepts explored in operating systems.
 
-This project focused on creating and deploying a straightforward yet effective HTTP server that can handle multiple concurrent client requests simultaneously.
+This project aimed to deploy a effective HTTP server that can handle multiple concurrent client requests at the same time.
 
-The C programming language was used for the system's implementation, utilizing POSIX system calls for thread creation and synchronization, semaphore management, shared memory management, and inter-process communication. The structure adopts a modular design to guarantee the maintainability and extensibility of various system elements
-
+The C programming language was used, utilizing POSIX system calls for thread creation and synchronization, semaphore management, shared memory management, and inter-process communication. 
+The architecture of the system is modularly designed, ensuring that various components are easy to maintain and extend.
 
 % ----------------------------------------------------------------------
 % 2. Implementation Details
