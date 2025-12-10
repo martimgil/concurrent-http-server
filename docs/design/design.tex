@@ -1,357 +1,394 @@
-\documentclass[a4paper,12pt]{article}
-
-% --- Essential Packages ---
-\usepackage[utf8]{inputenc}
-\usepackage[T1]{fontenc}
-\usepackage[english]{babel}
-\usepackage{geometry}
-\usepackage{graphicx}
-\usepackage{hyperref}
-\usepackage{listings}
-\usepackage{xcolor}
-\usepackage{float}
-
-% --- Configuration ---
-\geometry{margin=2.5cm}
-\definecolor{codegray}{rgb}{0.95,0.95,0.95}
-\lstset{
-    backgroundcolor=\color{codegray},
-    basicstyle=\ttfamily\small,
-    breaklines=true,
-    frame=single,
-    numbers=left,
-    language=C
-}
-
-% --- Metadata ---
-\title{
-    \textbf{Design Document}\\
-    \large Multi-Threaded Web Server with IPC
-}
-\author{
-    Martim Gil (ID: [124833]) \\
-    Nuno Leite Faria (ID: 112994) \\
-    \textit{Operating Systems - University of Aveiro}
-}
-\date{\today}
-
-\begin{document}
-
-\maketitle
-\tableofcontents
-\newpage
-
-% ----------------------------------------------------------------------
-\section{Architecture Overview}
-% ----------------------------------------------------------------------
-
-The system adopts a multi-process, multi-threaded architecture based on a
-Master–Worker model. This structure enables efficient handling of multiple
-simultaneous client connections while preserving process isolation and
-scalability across CPU cores.
-
-\subsection{Process Model}
-
-The application consists of one \textbf{Master Process} and $N$ \textbf{Worker Processes}.
-Each performs a distinct role in the server’s execution pipeline:
-
-\begin{itemize}
-    \item \textbf{Master:} Initializes configuration parameters, binds the listening
-          socket, and accepts incoming TCP connections. Each accepted connection
-          is first represented as a lightweight descriptor stored in a bounded
-          shared-memory queue, protected by semaphores. The master then transfers
-          the corresponding client file descriptor to the designated worker via
-          a UNIX domain socket using \texttt{SCM\_RIGHTS}. This hybrid approach
-          combines efficient interprocess signaling with safe descriptor passing.
-    \item \textbf{Workers:} Spawned by the master at startup, each worker waits for
-          connection assignments in the shared queue. Upon notification, it
-          receives the actual socket descriptor through the UNIX channel and
-          submits it to its local thread pool for processing. Each worker
-          maintains its own cache and counters but contributes to global
-          statistics through synchronized shared memory updates.
-\end{itemize}
-
-\begin{figure}[H]
+    \documentclass[a4paper,12pt]{article}
+    
+    % --- Essential Packages ---
+    \usepackage[utf8]{inputenc}
+    \usepackage[T1]{fontenc}
+    \usepackage[english]{babel}
+    \usepackage{geometry}
+    \usepackage{graphicx}
+    \usepackage{hyperref}
+    \usepackage{listings}
+    \usepackage{xcolor}
+    \usepackage{float}
+    
+    % --- Configuration ---
+    \geometry{margin=2.5cm}
+    \definecolor{codegray}{rgb}{0.95,0.95,0.95}
+    \lstset{
+        backgroundcolor=\color{codegray},
+        basicstyle=\ttfamily\small,
+        breaklines=true,
+        frame=single,
+        numbers=left,
+        language=C
+    }
+    
+    % --- Metadata ---
+    \title{
+        \textbf{Design Document}\\
+        \large Multi-Threaded Web Server with IPC
+    }
+    \author{
+        Martim Gil (ID: 124833) \\
+        Nuno Leite Faria (ID: 112994) \\
+        \textit{Operating Systems - University of Aveiro}
+    }
+    \date{\today}
+    
+    \begin{document}
+    
+    \maketitle
+    \tableofcontents
+    \newpage
+    
+    % ----------------------------------------------------------------------
+    \section{Architecture Overview}
+    % ----------------------------------------------------------------------
+    
+    The system adopts a multi-process, multi-threaded architecture based on a
+    Master–Worker model. This structure enables efficient handling of multiple
+    simultaneous client connections while preserving process isolation and
+    scalability across CPU cores.
+    
+    \subsection{Process Model}
+    
+    The application consists of one \textbf{Master Process} and $N$ \textbf{Worker Processes}.
+    Each performs a distinct role in the server’s execution pipeline:
+    
+    \begin{itemize}
+        \item \textbf{Master:} Initializes configuration parameters, binds the listening
+              socket, and accepts incoming TCP connections. Each accepted connection
+              is first represented as a lightweight descriptor stored in a bounded
+              shared-memory queue, protected by semaphores. The master then transfers
+              the corresponding client file descriptor to the designated worker via
+              a UNIX domain socket using \texttt{SCM\_RIGHTS}. This hybrid approach
+              combines efficient interprocess signaling with safe descriptor passing.
+        \item \textbf{Workers:} Spawned by the master at startup, each worker waits for
+              connection assignments in the shared queue. Upon notification, it
+              receives the actual socket descriptor through the UNIX channel and
+              submits it to its local thread pool for processing. Each worker
+              maintains its own cache and counters but contributes to global
+              statistics through synchronized shared memory updates.
+    \end{itemize}
+    
+    \begin{figure}[H]
+        \centering
+        % \includegraphics[width=0.8\textwidth]{architecture_diagram.png}
+        \caption{High-Level Architecture Diagram}
+        \label{fig:arch}
+    \end{figure}
+    
+    \subsection{Thread Model}
+    
+    Within each worker process, a fixed sized pool of threads is created during
+    initialization. The pool is managed through a bounded queue protected by a
+    \texttt{pthread\_mutex\_t} and a pair of condition variables for signaling.
+    Threads block when the queue is empty and wake upon task submission.  
+    Each thread handles one complete HTTP request–response cycle before returning
+    to the idle state. This design eliminates the overhead of thread creation at
+    runtime and maintains steady throughput under heavy load.
+    
+    \subsection{Coordination and Synchronization}
+    
+    Interprocess coordination relies on POSIX shared memory and named semaphores.
+    Shared memory stores both the connection queue and aggregated statistics,
+    while semaphores enforce mutual exclusion and synchronize access between the
+    master and workers.  
+    Within workers, thread-level synchronization is handled by mutexes and
+    condition variables, ensuring safe access to shared structures such as the
+    cache and log system. This combination of IPC primitives and in-process
+    synchronization guarantees correctness even under high concurrency.
+    
+    \subsection{Design Rationale}
+    
+    The architecture separates responsibilities cleanly: the master focuses on
+    connection management and system orchestration, while workers specialize in
+    request handling. The use of shared memory for lightweight signaling and
+    descriptor passing through UNIX domain sockets minimizes communication
+    overhead and preserves process isolation.  
+    This design yields a scalable, fault-tolerant server capable of leveraging
+    multi-core systems effectively while maintaining predictable and stable
+    performance.
+    
+    
+    % ----------------------------------------------------------------------
+    % 2. SHARED DATA STRUCTURES
+    % ----------------------------------------------------------------------
+    \section{Shared Data Structures}
+    Inter-Process Communication (IPC) between the master and workers relies on
+    POSIX shared memory with named semaphores. The shared region holds a
+    bounded queue for connection dispatch and a set of global runtime counters.
+    
+    \subsection{Memory Layout}
+    
+    Defined in \texttt{shared\_mem.h}, the \texttt{shared\_data\_t} structure
+    is allocated by the master process and mapped by all workers.
+    
+    \begin{lstlisting}[language=C]
+    typedef struct {
+        request_queue_t queue;   // Connection queue
+        server_stats_t  stats;   // Global statistics
+    } shared_data_t;
+    \end{lstlisting}
+    
+    Creation uses \texttt{shm\_open()}, \texttt{ftruncate()}, and
+    \texttt{mmap()}, with cleanup performed by the master on shutdown
+    via \texttt{shm\_unlink()}.
+    
+    \subsection{Circular Buffer}
+    
+    The interprocess queue is implemented as a bounded FIFO in shared memory:
+    
+    \begin{lstlisting}[language=C]
+    typedef struct {
+        int worker_id;       // Target worker
+        int placeholder_fd;  // Marker only (real FD passed via SCM_RIGHTS)
+    } connection_item_t;
+    
+    typedef struct {
+        connection_item_t items[MAX_QUEUE_SIZE];
+        int front;          // Dequeue index
+        int rear;           // Enqueue index
+        int count;          // Current occupancy
+    } connection_queue_t;
+    \end{lstlisting}
+    
+    \paragraph{Semantics.}
+    The Master (producer) enqueues a \texttt{connection\_item\_t} selecting the
+    \texttt{worker\_id}; the \texttt{placeholder\_fd} is not a transferable descriptor.
+    The actual client socket is sent to the chosen Worker over a UNIX domain socket
+    using \texttt{SCM\_RIGHTS}.
+    
+    \paragraph{Synchronization.}
+    Enqueue/dequeue follow classical producer–consumer control with named semaphores:
+    \texttt{empty\_slots} (free capacity), \texttt{filled\_slots} (pending items),
+    and \texttt{queue\_mutex} (exclusive updates of \texttt{front}/\texttt{rear}/\texttt{count}).
+    On enqueue: wait \texttt{empty\_slots} \(\rightarrow\) lock \texttt{queue\_mutex}
+    \(\rightarrow\) write \texttt{items[rear]} and advance \texttt{rear} (mod
+    \texttt{MAX\_QUEUE\_SIZE}); increment \texttt{count} \(\rightarrow\) unlock
+    \(\rightarrow\) post \texttt{filled\_slots}.  
+    On dequeue: wait \texttt{filled\_slots} \(\rightarrow\) lock \texttt{queue\_mutex}
+    \(\rightarrow\) read \texttt{items[front]} and advance \texttt{front}; decrement
+    \texttt{count} \(\rightarrow\) unlock \(\rightarrow\) post \texttt{empty\_slots}.
+    This guarantees correctness under concurrent producers/consumers and prevents
+    overrun/underrun of the circular buffer.
+    
+    
+    \subsection{Global Statistics}
+    
+    The \texttt{server\_stats\_t} structure, located in the same region,
+    records cumulative server activity.
+    
+    \begin{lstlisting}[language=C]
+    typedef struct {
+        long total_requests;          
+        long bytes_transferred;        
+        long status_200;              
+        long status_404;               
+        long status_500;            
+        int  active_connections;       
+        long total_response_time_ms;  
+    } server_stats_t;
+    \end{lstlisting}
+    
+    Workers increment these counters under a dedicated semaphore
+    (\texttt{stats\_mutex}) to guarantee atomic access.  
+    Values are read periodically by monitoring components such as the web
+    dashboard and log system.
+    
+    \subsection{Synchronization Lifecycle}
+    
+    The master initializes shared memory and all semaphores during startup,
+    while workers connect to existing objects.  
+    At termination, the master releases all IPC resources, preventing
+    persistent semaphores or memory segments.
+    
+    This design achieves reliable communication and coordinated state
+    management with minimal interprocess overhead.
+    
+    % ----------------------------------------------------------------------
+    % 3. SYNCHRONIZATION MECHANISMS
+    % ----------------------------------------------------------------------
+    \section{Synchronization Mechanisms}
+    
+    \subsection{Process Synchronization (Named Semaphores)}
+    Master and Workers coordinate over a bounded circular queue in shared memory using
+    named POSIX semaphores (see \texttt{semaphores.h/.c}, \texttt{shared\_mem.h/.c}):
+    
+    \begin{itemize}
+      \item \textbf{\texttt{empty\_slots}} (\texttt{/ws\_empty}) — counts free positions in the interprocess queue; the Master (producer) waits when the queue is full.
+      \item \textbf{\texttt{filled\_slots}} (\texttt{/ws\_filled}) — counts pending items. Workers (consumers) wait when the queue is empty.
+      \item \textbf{\texttt{queue\_mutex}} (\texttt{/ws\_queue\_mutex}) — mutual exclusion for updating queue indices (\texttt{front/rear/count}).
+      \item \textbf{\texttt{stats\_mutex}} (\texttt{/ws\_stats\_mutex}) — serializes updates to \texttt{server\_stats\_t} (see \texttt{stats.c}).
+      \item \textbf{\texttt{log\_mutex}} (\texttt{/ws\_log\_mutex}) — serializes log writes across processes.
+    \end{itemize}
+    
+    Producer path (in \texttt{master.c}): wait \texttt{empty\_slots} \(\rightarrow\) lock \texttt{queue\_mutex} \(\rightarrow\) enqueue \(\rightarrow\) unlock \(\rightarrow\) post \texttt{filled\_slots}.  
+    Consumer path (in \texttt{worker.c}): wait \texttt{filled\_slots} \(\rightarrow\) lock \texttt{queue\_mutex} \(\rightarrow\) dequeue \(\rightarrow\) unlock \(\rightarrow\) post \texttt{empty\_slots}.
+    
+    \subsection{Thread Synchronization (Mutex \& Condition Variables)}
+    Inside each Worker, the thread pool uses in-process primitives (see \texttt{thread\_pool.h/.c}):
+    
+    \begin{itemize}
+      \item \textbf{\texttt{pthread\_mutex\_t}} — protects the internal job queue and shared pool state.
+      \item \textbf{\texttt{pthread\_cond\_t}} — allows worker threads to sleep when the queue is empty and wake on job submission or shutdown.
+    \end{itemize}
+    
+    Threads block on \texttt{pthread\_cond\_wait} when there is no work and are released by \texttt{pthread\_cond\_signal}/\texttt{broadcast} on submission or shutdown, ensuring stable throughput without busy-waiting.
+    
+    % ----------------------------------------------------------------------
+    % 4. COMPONENT DESIGN
+    % ----------------------------------------------------------------------
+    \section{Component Design}
+    
+    \subsection{LRU Cache}
+    
+    Each Worker maintains an in-memory Least Recently Used (LRU) cache for static file
+    contents, combining a hash table (for $O(1)$ lookups) with a doubly linked list
+    (for recency order). Capacity is enforced in bytes; entries in active use are
+    protected from eviction via reference counting.
+    
+    \paragraph{Structures.}\mbox{}\\[-0.2\baselineskip]
+    \begin{lstlisting}[language=C]
+    // Cache entry: path key, raw data, size, list links, bucket link, refcount
+    typedef struct cache_entry {
+        char *key;                  
+        uint8_t *data;               
+        size_t size;                
+        struct cache_entry *prev, *next;  
+        struct cache_entry *hnext;       
+        size_t refcnt;               
+    } cache_entry_t;
+    
+    // Cache container: capacity/accounting, LRU ends, hash table, RW lock, stats
+    struct file_cache {
+        size_t capacity;              
+        size_t bytes_used;            
+        size_t items;                 
+        cache_entry_t *lru_head;      
+        cache_entry_t *lru_tail;     
+        size_t nbuckets;             
+        cache_entry_t **buckets;    
+        pthread_rwlock_t rwlock;     
+        size_t hits, misses, evictions; 
+    };
+    \end{lstlisting}
+    
+    \paragraph{Concurrency.}
+    The cache is protected by \texttt{pthread\_rwlock\_t}: lookups acquire the read
+    lock; insertions, updates, and evictions acquire the write lock. This enables
+    high read concurrency while preserving exclusive access for structural changes.
+    
+    \paragraph{Operation.}
+    \texttt{cache\_get(key)} computes the bucket, scans for a matching entry, and on
+    hit promotes it to the LRU head. On miss, the Worker loads the file, then
+    \texttt{cache\_put(key, data, size)} inserts the entry, updating
+    \texttt{bytes\_used}. If capacity is exceeded, the cache evicts from the LRU tail
+    until within limit; entries with \texttt{refcnt>0} are skipped. Oversized files
+    may be served but not cached.
+    
+    \paragraph{Integration.}
+    Workers consult the cache before disk I/O. On hit/miss, they update the cache
+    counters and the shared system statistics accordingly. Because each Worker owns
+    its cache, no inter-process locking is required; only per-cache RW locking
+    applies.
+    
+    
+    % ----------------------------------------------------------------------
+    \subsection{Thread-Safe Logging}
+    
+    All processes append to a single log. Writes are serialized with a named POSIX semaphore and the file is opened with \texttt{O\_APPEND} to ensure atomic append.
+    
+    \paragraph{API.}
+    The logger records structured entries via:
+    \begin{lstlisting}[language=C]
+    void logger_write(const char* ip,
+                      const char* method,
+                      const char* path,
+                      int status,
+                      size_t bytes_sent,
+                      long duration_ms);
+    \end{lstlisting}
+    Each call emits a single line containing client IP, method, path, status, response size, and request latency.
+    
+    \paragraph{Synchronization.}
+    A named semaphore (\texttt{sem\_open}, initial value 1) guards the critical section:
+    \begin{itemize}
+      \item \texttt{sem\_wait(g\_sem)} before formatting/buffering;
+      \item optional buffered accumulation; periodic/time-based flush;
+      \item rotation check; atomic \texttt{write}/\texttt{fflush};
+      \item \texttt{sem\_post(g\_sem)} on exit.
+    \end{itemize}
+    Using \texttt{O\_APPEND} guarantees kernel-level append semantics even if multiple processes hold the file descriptor.
+    
+    \paragraph{Rotation \& Buffering.}
+    The logger maintains an internal buffer and rotates the file at about 10\,MB, keeping a finite number of generations. A time-based flush (e.g., 5\,s) reduces syscall frequency without relaxing mutual exclusion.
+    
+    \paragraph{Integration.}
+    The Master logs accepts and lifecycle events; Workers log per-request lines with latency. This yields stable, non-interleaved audit trails suitable for throughput/latency analysis and error triage.
+    
+    
+    % ----------------------------------------------------------------------
+    \subsection{Summary}
+    
+    \begin{table}[H]
     \centering
-    % \includegraphics[width=0.8\textwidth]{architecture_diagram.png}
-    \caption{High-Level Architecture Diagram}
-    \label{fig:arch}
-\end{figure}
-
-\subsection{Thread Model}
-
-Within each worker process, a fixed sized pool of threads is created during
-initialization. The pool is managed through a bounded queue protected by a
-\texttt{pthread\_mutex\_t} and a pair of condition variables for signaling.
-Threads block when the queue is empty and wake upon task submission.  
-Each thread handles one complete HTTP request–response cycle before returning
-to the idle state. This design eliminates the overhead of thread creation at
-runtime and maintains steady throughput under heavy load.
-
-\subsection{Coordination and Synchronization}
-
-Interprocess coordination relies on POSIX shared memory and named semaphores.
-Shared memory stores both the connection queue and aggregated statistics,
-while semaphores enforce mutual exclusion and synchronize access between the
-master and workers.  
-Within workers, thread-level synchronization is handled by mutexes and
-condition variables, ensuring safe access to shared structures such as the
-cache and log system. This combination of IPC primitives and in-process
-synchronization guarantees correctness even under high concurrency.
-
-\subsection{Design Rationale}
-
-The architecture separates responsibilities cleanly: the master focuses on
-connection management and system orchestration, while workers specialize in
-request handling. The use of shared memory for lightweight signaling and
-descriptor passing through UNIX domain sockets minimizes communication
-overhead and preserves process isolation.  
-
-\textbf{Note on Descriptor Passing Implementation:} While the project requirements suggest a shared memory queue for connection distribution, standard POSIX process isolation prevents the direct sharing of open file descriptors (sockets) purely through shared memory integers. Therefore, this architecture implements:
-\begin{itemize}
-    \item \textbf{Shared Memory Queue:} Used for synchronization (managing empty/filled slots) and task assignment (tracking which worker is busy).
-    \item \textbf{Unix Domain Sockets:} Used as the transport mechanism to securely pass the actual socket file descriptor from Master to Worker using \texttt{SCM\_RIGHTS} ancillary data.
-\end{itemize}
-
-% ----------------------------------------------------------------------
-% 2. SHARED DATA STRUCTURES
-% ----------------------------------------------------------------------
-\section{Shared Data Structures}
-Inter-Process Communication (IPC) between the master and workers relies on
-POSIX shared memory with named semaphores. The shared region holds a
-bounded queue for connection dispatch and a set of global runtime counters.
-
-\subsection{Memory Layout}
-
-Defined in \texttt{shared\_mem.h}, the \texttt{shared\_data\_t} structure
-is allocated by the master process and mapped by all workers.
-
-\begin{lstlisting}[language=C]
-typedef struct {
-    request_queue_t queue;   // Connection queue
-    server_stats_t  stats;   // Global statistics
-} shared_data_t;
-\end{lstlisting}
-
-Creation uses \texttt{shm\_open()}, \texttt{ftruncate()}, and
-\texttt{mmap()}, with cleanup performed by the master on shutdown
-via \texttt{shm\_unlink()}.
-
-\subsection{Circular Buffer}
-
-The \texttt{request\_queue\_t} structure implements a fixed-size FIFO
-buffer shared between the master (producer) and workers (consumers).  
-Access is synchronized with three semaphores:
-
-\begin{itemize}
-    \item \textbf{\texttt{empty\_slots}} — counts free positions; producer blocks when full.
-    \item \textbf{\texttt{filled\_slots}} — counts occupied positions; consumers block when empty.
-    \item \textbf{\texttt{queue\_mutex}} — ensures exclusive updates of queue indices.
-\end{itemize}
-
-This mechanism implements a classic producer–consumer model, ensuring
-atomic enqueue and dequeue operations across processes.
-
-\subsection{Global Statistics}
-
-The \texttt{server\_stats\_t} structure, located in the same region,
-records cumulative server activity.
-
-\begin{lstlisting}[language=C]
-typedef struct {
-    long total_requests;          
-    long bytes_transferred;        
-    long status_200;              
-    long status_404;               
-    long status_500;            
-    int  active_connections;       
-    long total_response_time_ms;  
-} server_stats_t;
-\end{lstlisting}
-
-Workers increment these counters under a dedicated semaphore
-(\texttt{stats\_mutex}) to guarantee atomic access.  
-Values are read periodically by monitoring components such as the web
-dashboard and log system.
-
-\subsection{Synchronization Lifecycle}
-
-The master initializes shared memory and all semaphores during startup,
-while workers connect to existing objects.  
-At termination, the master releases all IPC resources, preventing
-persistent semaphores or memory segments.
-
-This design achieves reliable communication and coordinated state
-management with minimal interprocess overhead.
-
-% ----------------------------------------------------------------------
-% 3. SYNCHRONIZATION MECHANISMS
-% ----------------------------------------------------------------------
-\section{Synchronization Mechanisms}
-
-\subsection{Process Synchronization (Named Semaphores)}
-Master and Workers coordinate over a bounded circular queue in shared memory using
-named POSIX semaphores (see \texttt{semaphores.h/.c}, \texttt{shared\_mem.h/.c}):
-
-\begin{itemize}
-  \item \textbf{\texttt{empty\_slots}} (\texttt{/ws\_empty}) — counts free positions in the interprocess queue; the Master (producer) waits when the queue is full.
-  \item \textbf{\texttt{filled\_slots}} (\texttt{/ws\_filled}) — counts pending items. Workers (consumers) wait when the queue is empty.
-  \item \textbf{\texttt{queue\_mutex}} (\texttt{/ws\_queue\_mutex}) — mutual exclusion for updating queue indices (\texttt{front/rear/count}).
-  \item \textbf{\texttt{stats\_mutex}} (\texttt{/ws\_stats\_mutex}) — serializes updates to \texttt{server\_stats\_t} (see \texttt{stats.c}).
-  \item \textbf{\texttt{log\_mutex}} (\texttt{/ws\_log\_mutex}) — serializes log writes across processes.
-\end{itemize}
-
-Producer path (in \texttt{master.c}): wait \texttt{empty\_slots} \(\rightarrow\) lock \texttt{queue\_mutex} \(\rightarrow\) enqueue \(\rightarrow\) unlock \(\rightarrow\) post \texttt{filled\_slots}.  
-Consumer path (in \texttt{worker.c}): wait \texttt{filled\_slots} \(\rightarrow\) lock \texttt{queue\_mutex} \(\rightarrow\) dequeue \(\rightarrow\) unlock \(\rightarrow\) post \texttt{empty\_slots}.
-
-\subsection{Thread Synchronization (Mutex \& Condition Variables)}
-Inside each Worker, the thread pool uses in-process primitives (see \texttt{thread\_pool.h/.c}):
-
-\begin{itemize}
-  \item \textbf{\texttt{pthread\_mutex\_t}} — protects the internal job queue and shared pool state.
-  \item \textbf{\texttt{pthread\_cond\_t}} — allows worker threads to sleep when the queue is empty and wake on job submission or shutdown.
-\end{itemize}
-
-Threads block on \texttt{pthread\_cond\_wait} when there is no work and are released by \texttt{pthread\_cond\_signal}/\texttt{broadcast} on submission or shutdown, ensuring stable throughput without busy-waiting.
-
-% ----------------------------------------------------------------------
-% 4. COMPONENT DESIGN
-% ----------------------------------------------------------------------
-\section{Component Design}
-
-\subsection{LRU Cache}
-
-Each Worker maintains an in-memory Least Recently Used (LRU) cache for static file
-contents, combining a hash table (for $O(1)$ lookups) with a doubly linked list
-(for recency order). Capacity is enforced in bytes; entries in active use are
-protected from eviction via reference counting.
-
-\paragraph{Structures.}\mbox{}\\[-0.2\baselineskip]
-\begin{lstlisting}[language=C]
-// Cache entry: path key, raw data, size, list links, bucket link, refcount
-typedef struct cache_entry {
-    char *key;                  
-    uint8_t *data;               
-    size_t size;                
-    struct cache_entry *prev, *next;  
-    struct cache_entry *hnext;       
-    size_t refcnt;               
-} cache_entry_t;
-
-// Cache container: capacity/accounting, LRU ends, hash table, RW lock, stats
-struct file_cache {
-    size_t capacity;              
-    size_t bytes_used;            
-    size_t items;                 
-    cache_entry_t *lru_head;      
-    cache_entry_t *lru_tail;     
-    size_t nbuckets;             
-    cache_entry_t **buckets;    
-    pthread_rwlock_t rwlock;     
-    size_t hits, misses, evictions; 
-};
-\end{lstlisting}
-
-\paragraph{Concurrency.}
-The cache is protected by \texttt{pthread\_rwlock\_t}: lookups acquire the read
-lock; insertions, updates, and evictions acquire the write lock. This enables
-high read concurrency while preserving exclusive access for structural changes.
-
-\paragraph{Operation.}
-\texttt{cache\_get(key)} computes the bucket, scans for a matching entry, and on
-hit promotes it to the LRU head. On miss, the Worker loads the file, then
-\texttt{cache\_put(key, data, size)} inserts the entry, updating
-\texttt{bytes\_used}. If capacity is exceeded, the cache evicts from the LRU tail
-until within limit; entries with \texttt{refcnt>0} are skipped. Oversized files
-may be served but not cached.
-
-\paragraph{Integration.}
-Workers consult the cache before disk I/O. On hit/miss, they update the cache
-counters and the shared system statistics accordingly. Because each Worker owns
-its cache, no inter-process locking is required; only per-cache RW locking
-applies.
-
-
-% ----------------------------------------------------------------------
-\subsection{Thread-Safe Logging}
-
-All processes append to a single log. Writes are serialized with a named POSIX semaphore and the file is opened with \texttt{O\_APPEND} to ensure atomic append.
-
-\paragraph{API.}
-The logger records structured entries via:
-\begin{lstlisting}[language=C]
-void logger_write(const char* ip,
-                  const char* method,
-                  const char* path,
-                  int status,
-                  size_t bytes_sent,
-                  long duration_ms);
-\end{lstlisting}
-Each call emits a single line containing client IP, method, path, status, response size, and request latency.
-
-\paragraph{Synchronization.}
-A named semaphore (\texttt{sem\_open}, initial value 1) guards the critical section:
-\begin{itemize}
-  \item \texttt{sem\_wait(g\_sem)} before formatting/buffering;
-  \item optional buffered accumulation; periodic/time-based flush;
-  \item rotation check; atomic \texttt{write}/\texttt{fflush};
-  \item \texttt{sem\_post(g\_sem)} on exit.
-\end{itemize}
-Using \texttt{O\_APPEND} guarantees kernel-level append semantics even if multiple processes hold the file descriptor.
-
-\paragraph{Rotation \& Buffering.}
-The logger maintains an internal buffer and rotates the file at about 10\,MB, keeping a finite number of generations. A time-based flush (e.g., 5\,s) reduces syscall frequency without relaxing mutual exclusion.
-
-\paragraph{Integration.}
-The Master logs accepts and lifecycle events; Workers log per-request lines with latency. This yields stable, non-interleaved audit trails suitable for throughput/latency analysis and error triage.
-
-
-% ----------------------------------------------------------------------
-% 5. SYSTEM LIFECYCLE
-% ----------------------------------------------------------------------
-\section{System Lifecycle}
-
-\subsection{Initialization}
-At startup, the Master process loads configuration parameters from
-\texttt{server.conf}, then creates the required POSIX shared memory region and
-named semaphores that enable communication and synchronization across processes.
-It proceeds to initialize the TCP listening socket and fork the configured number of
-Worker processes. Each Worker attaches to the existing shared memory and semaphores,
-initializes its local components (cache, logger, and thread pool), and waits for tasks
-to arrive through the interprocess queue.
-
-\subsection{Steady Operation}
-During normal execution, the Master accepts new client connections and
-enqueues them into the shared circular buffer. Each Worker dequeues available requests,
-dispatching them to a thread pool that handles HTTP parsing, response generation, cache
-lookup, and logging. Shared statistics are updated atomically under semaphore
-protection. This design ensures high concurrency while maintaining strict consistency
-of shared state.
-
-\subsection{Graceful Shutdown}
-When receiving a termination signal (\texttt{SIGINT} or \texttt{SIGTERM}), the Master
-stops accepting new connections and signals all Workers to exit. Each Worker halts its
-dispatch loop, terminates its thread pool after completing active requests, and releases
-local resources. Finally, the Master process waits for all Workers to terminate and then
-cleans up global IPC objects, including shared memory segments and named semaphores,
-before exiting cleanly.
-
-\subsection{Error Recovery}
-If initialization or runtime failures occur—such as socket binding errors, semaphore
-creation issues, or shared memory faults—the system logs the event, cleans any partially
-allocated resources, and exits with an appropriate status code to prevent IPC leakage.
-
-
-% ----------------------------------------------------------------------
-% 6. DIAGRAMS
-% ----------------------------------------------------------------------
-\section{Flowcharts}
-% [Instruction: Add required flowcharts here]
-
-\begin{figure}[H]
-    \centering
-    % \includegraphics[width=0.7\textwidth]{request_flow.png}
-    \caption{Request Processing Flowchart}
-\end{figure}
-
-\end{document}
+    \begin{tabular}{|l|l|p{7cm}|}
+    \hline
+    \textbf{Component} & \textbf{Synchronization} & \textbf{Purpose} \\ \hline
+    Cache & \texttt{pthread\_rwlock\_t} & Multi-reader/single-writer protection for static file caching. \\ \hline
+    Logger & \texttt{sem\_t *log\_mutex} & Serializes access to shared log file across all processes. \\ \hline
+    Threaded Logger & \texttt{pthread\_mutex\_t}, \texttt{pthread\_cond\_t} & Asynchronous batched logging for reduced I/O contention. \\ \hline
+    \end{tabular}
+    \caption{Component Synchronization Summary}
+    \end{table}
+    
+    % ----------------------------------------------------------------------
+    % 5. SYSTEM LIFECYCLE
+    % ----------------------------------------------------------------------
+    \section{System Lifecycle}
+    
+    \subsection{Initialization}
+    At startup, the Master process loads configuration parameters from
+    \texttt{server.conf}, then creates the required POSIX shared memory region and
+    named semaphores that enable communication and synchronization across processes.
+    It proceeds to initialize the TCP listening socket and fork the configured number of
+    Worker processes. Each Worker attaches to the existing shared memory and semaphores,
+    initializes its local components (cache, logger, and thread pool), and waits for tasks
+    to arrive through the interprocess queue.
+    
+    \subsection{Steady Operation}
+    During normal execution, the Master continuously accepts new client connections and
+    enqueues them into the shared circular buffer. Each Worker dequeues available requests,
+    dispatching them to a thread pool that handles HTTP parsing, response generation, cache
+    lookup, and logging. Shared statistics are updated atomically under semaphore
+    protection. This design ensures high concurrency while maintaining strict consistency
+    of shared state.
+    
+    \subsection{Graceful Shutdown}
+    When receiving a termination signal (\texttt{SIGINT} or \texttt{SIGTERM}), the Master
+    stops accepting new connections and signals all Workers to exit. Each Worker halts its
+    dispatch loop, terminates its thread pool after completing active requests, and releases
+    local resources. Finally, the Master process waits for all Workers to terminate and then
+    cleans up global IPC objects, including shared memory segments and named semaphores,
+    before exiting cleanly.
+    
+    \subsection{Error Recovery}
+    If initialization or runtime failures occur—such as socket binding errors, semaphore
+    creation issues, or shared memory faults—the system logs the event, cleans any partially
+    allocated resources, and exits with an appropriate status code to prevent IPC leakage.
+    
+    
+    % ----------------------------------------------------------------------
+    % 6. DIAGRAMS
+    % ----------------------------------------------------------------------
+    \section{Flowcharts}
+    % [Instruction: Add required flowcharts here]
+    
+    \begin{figure}[H]
+        \centering
+        % \includegraphics[width=0.7\textwidth]{request_flow.png}
+        \caption{Request Processing Flowchart}
+    \end{figure}
+    
+    \end{document}
