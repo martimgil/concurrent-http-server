@@ -280,22 +280,23 @@
     Producer path (in \texttt{master.c}): wait \texttt{empty\_slots} $\rightarrow$ lock \texttt{queue\_mutex} $\rightarrow$ enqueue $\rightarrow$ unlock $\rightarrow$ post \texttt{filled\_slots}.  
     Consumer path (in \texttt{worker.c}): wait \texttt{filled\_slots} $\rightarrow$ lock \texttt{queue\_mutex} $\rightarrow$ dequeue $\rightarrow$ unlock $\rightarrow$ post \texttt{empty\_slots}.
     
-\begin{figure}[H]
-\centering
-\begin{tikzpicture}[
+        \begin{figure}[H]
+        \centering
+        \begin{tikzpicture}[
             node distance=1.5cm,
-            auto,
             block/.style={rectangle, draw=black, thick, fill=white, text width=5em, align=center, minimum height=3em},
-            line/.style={draw, thick, -latex, shorten >=2pt},
             comment/.style={text width=4cm, align=left, gray, font=\footnotesize}
         ]
         
         % --- Columns ---
-        \node (master) [align=center] {\textbf{Master Process} \\ (Producer)};
-        \node (shm) [right=4cm of master, align=center] {\textbf{Shared Memory} \\ (Critical Section)};
-        \node (worker) [right=4cm of shm, align=center] {\textbf{Worker Process} \\ (Consumer)};
+        \node (master) {\textbf{Master Process} \\ (Producer)};
+        \node (shm) [right=4cm of master] {\textbf{Shared Memory} \\ (Critical Section)};
+        \node (worker) [right=4cm of shm] {\textbf{Worker Process} \\ (Consumer)};
 
-
+        % --- Time lines ---
+        \draw[thick, gray, dashed] (master) -- ++(0,-9);
+        \draw[thick, gray, dashed] (shm) -- ++(0,-9);
+        \draw[thick, gray, dashed] (worker) -- ++(0,-9);
 
         % --- Master Flow ---
         \node[block, fill=blue!10, below=1cm of master] (m_wait) {\texttt{sem\_wait}\\(empty)};
@@ -305,7 +306,7 @@
         \node[block, fill=green!10, below=0.5cm of m_unlock] (m_signal) {\texttt{sem\_post}\\(filled)};
 
         % --- Worker Flow (offset down) ---
-        \node[block, fill=green!10] (w_wait) at ($(worker |- m_signal) + (0,-1.5)$) {\texttt{sem\_wait}\\(filled)};
+        \node[block, fill=green!10, right=8cm of m_signal, yshift=-1cm] (w_wait) {\texttt{sem\_wait}\\(filled)};
         \node[block, fill=red!10, below=0.5cm of w_wait] (w_lock) {\texttt{sem\_wait}\\(mutex)};
         \node[block, dashed, below=0.5cm of w_lock] (w_read) {Dequeue FD};
         \node[block, fill=red!10, below=0.5cm of w_read] (w_unlock) {\texttt{sem\_post}\\(mutex)};
@@ -334,20 +335,10 @@
         \draw[->] (w_read) -- (w_unlock);
         \draw[->] (w_unlock) -- (w_signal);
 
-
-        % --- Cross-Process Signal ---
-        \draw[->, dotted, thick] (m_signal) -- node[above, sloped, font=\footnotesize] {Signal (filled)} (w_wait);
-
-        % --- Time lines (drawn last) ---
-        \path (w_signal.south) ++(0,-0.5) coordinate (bottom_y);
-        \draw[thick, gray, dashed] (master) -- (master |- bottom_y);
-        \draw[thick, gray, dashed] (shm) -- (shm |- bottom_y);
-        \draw[thick, gray, dashed] (worker) -- (worker |- bottom_y);
-
-\end{tikzpicture}
-\caption{Producer-Consumer Synchronization Logic preventing Deadlocks}
-\label{fig:sync_logic}
-\end{figure}
+        \end{tikzpicture}
+        \caption{Producer-Consumer Synchronization Logic preventing Deadlocks}
+        \label{fig:sync_logic}
+    \end{figure}
     \subsection{Thread Synchronization (Mutex \& Condition Variables)}
     Inside each Worker, the thread pool uses in-process primitives (see \texttt{thread\_pool.h/.c}):
     
