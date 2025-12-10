@@ -385,19 +385,21 @@ The \texttt{logger.c} module initializes a shared semaphore-protected log file d
 Configuration values such as \texttt{MAX\_QUEUE\_SIZE} and \texttt{CACHE\_SIZE\_MB} directly affect performance and memory footprint.  
 Increasing these parameters can improve throughput but requires more system memory and may impact scheduling latency.
 
-\subsection{Default Values}
-If a parameter is not specified, the server loads default constants defined in \texttt{config.h}:
-\begin{itemize}
-  \item \texttt{PORT = 8080}
-  \item \texttt{DOCUMENT\_ROOT = www}
-  \item \texttt{NUM\_WORKERS = 2}
-  \item \texttt{THREADS\_PER\_WORKER = 4}
-  \item \texttt{MAX\_QUEUE\_SIZE = 50}
-  \item \texttt{LOG\_FILE = logs/server.log}
-  \item \texttt{CACHE\_SIZE\_MB = 5}
-\end{itemize}
+\subsection{Parameter Requirements}
 
-These defaults ensure that the server can operate even if the configuration file is missing or incomplete, using safe and conservative values for small-scale deployments.
+\paragraph{Required keys.}
+The following keys must be present and valid:
+\begin{itemize}
+  \item \texttt{PORT} (integer $>$ 0 and typically $>$ 1024 for non-root users)
+  \item \texttt{DOCUMENT\_ROOT} (existing directory)
+  \item \texttt{NUM\_WORKERS} (positive integer)
+  \item \texttt{THREADS\_PER\_WORKER} (positive integer)
+  \item \texttt{MAX\_QUEUE\_SIZE} (non-negative integer)
+  \item \texttt{CACHE\_SIZE\_MB} (non-negative integer)
+  \item \texttt{LOG\_FILE} (writable path)
+  \item \texttt{TIMEOUT\_SECONDS} (non-negative integer)
+  \item \texttt{LOG\_LEVEL} (\texttt{DEBUG|INFO|WARN|ERROR})
+\end{itemize}
 
 \subsection{Validation and Error Handling}
 Each configuration parameter is validated at startup:
@@ -487,7 +489,7 @@ To view a list of other available files:
 ls www/
 \end{lstlisting}
 
----
+ 
 
 
 \subsection{Accessing from a Web Browser}
@@ -498,7 +500,7 @@ http://localhost:8080
 You should see the default landing page (\texttt{index.html}) loaded from the local \texttt{www/} directory.  
 The server will log each access in the file defined by the \texttt{LOG\_FILE} parameter (default: \texttt{logs/server.log}).
 
----
+ 
 
 \subsection{Monitoring Logs}
 All requests and internal events are recorded in the log file.  
@@ -510,7 +512,7 @@ tail -f logs/server.log
 Each log entry contains a timestamp, process ID, thread ID, client IP, and the requested resource.  
 Concurrent access from multiple clients is safely synchronized through semaphores, ensuring clean, non-interleaved lines.
 
----
+ 
 
 \subsection{Checking Live Statistics}
 The server maintains real-time statistics on shared memory, including request counts, cache hits, and bytes served.  
@@ -538,7 +540,7 @@ Avg_response_time_ms=D
 Statistics are refreshed periodically (default: every 30 seconds).  
 If run in a separate terminal, \texttt{stats\_reader} provides a non-intrusive live view of the server’s performance.
 
----
+ 
 
 \subsection{Concurrent Request Example}
 To simulate multiple simultaneous clients, use the Apache Benchmark tool (\texttt{ab}):
@@ -555,7 +557,7 @@ where:
 
 The output displays average latency, throughput, and failed request counts, allowing quick performance evaluation under load.
 
----
+ 
 
 \subsection{Error Handling Verification}
 To test custom error pages:
@@ -571,52 +573,87 @@ Expected response:
 
 This confirms that the server correctly maps missing files to the predefined error template located in \texttt{www/errors/404.html}.
 
-% ======================================================================
+% ----------------------------------------------------------------------
 \subsection{Web Dashboard (Bonus Feature)}
-% ======================================================================
+% ----------------------------------------------------------------------
 
-The project includes an optional static dashboard, provided in the file
-\texttt{www/dashboard.html}. This page offers a lightweight browser-based
-interface for monitoring server activity and performance statistics.
+The project includes a fully self-contained Web Dashboard, implemented in
+\texttt{www/dashboard.html}. This optional component provides a modern
+browser-based interface for real-time server monitoring. It uses
+\textbf{TailwindCSS} for layout and design, \textbf{Chart.js} for
+visualization, and periodically fetches live metrics from the backend endpoint
+\texttt{/api/stats} in JSON format.
 
 \paragraph{Accessing the Dashboard.}
 After starting the server, open any web browser and navigate to:
 \begin{verbatim}
 http://localhost:8080/dashboard.html
 \end{verbatim}
-The dashboard is served like any other static file under the directory
-defined by \texttt{DOCUMENT\_ROOT} in \texttt{server.conf}.  
-No additional configuration or ports are required.
+The page is automatically refreshed every two seconds to display current
+server statistics.
 
-\paragraph{Contents and Functionality.}
-The dashboard page uses the shared stylesheet
-\texttt{www/style.css} and the JavaScript logic defined in
-\texttt{www/script.js} (and its corresponding TypeScript source
-\texttt{script.ts}).  
-It may display or periodically refresh basic metrics such as:
+\paragraph{Displayed Information.}
+The dashboard presents an overview of runtime metrics including:
 \begin{itemize}
-  \item Total requests handled by the server.
-  \item Active workers and threads in operation.
-  \item Cache hit and miss ratios.
-  \item Current uptime or activity counters.
+  \item \textbf{Total Requests} – cumulative number of handled HTTP requests.
+  \item \textbf{Data Transferred} – total outgoing bandwidth.
+  \item \textbf{Average Response Time} – mean latency in milliseconds.
+  \item \textbf{Active Connections} – number of concurrent client sessions.
+  \item \textbf{HTTP Status Distribution} – counters for 200, 404, and 500
+        responses.
+  \item \textbf{Cache Performance} – hit/miss counts and calculated hit rate.
+  \item \textbf{Requests per Second Chart} – dynamic time-series graph showing
+        recent load levels.
 \end{itemize}
+
+\paragraph{Technology Stack.}
+\begin{itemize}
+  \item \textbf{TailwindCSS} is loaded via CDN to provide the responsive dark
+        interface without additional assets.
+  \item \textbf{Chart.js} (also via CDN) renders a continuously updated line
+        chart.
+  \item The dashboard logic is implemented directly in inline JavaScript,
+        without external dependencies or build steps.
+\end{itemize}
+
+\paragraph{Data Source (\texttt{/api/stats}).}
+The page periodically issues HTTP \texttt{GET} requests to
+\texttt{/api/stats}. The server must expose this endpoint and return a JSON
+object with the following fields (example):
+\begin{lstlisting} [language=json]
+{
+  "total_requests": A,
+  "bytes_transferred": B,
+  "avg_response_time_ms": C,
+  "active_connections": D,
+  "status_codes": { "200": X, "404": Y, "500": Z },
+  "cache": { "hits": E, "misses": F, "hit_rate": E/(E+F) * 100 }
+}
+*the letters are number placeholders that can change depeding on the number of requests and their volume
+\end{lstlisting}
 
 \paragraph{Troubleshooting.}
 \begin{itemize}
-  \item If the browser reports a \texttt{404 Not Found}, ensure that
-        \texttt{dashboard.html} exists inside the configured document root:
-        \begin{lstlisting}[language=bash]
-        ls www/ | grep dashboard.html
-        \end{lstlisting}
-  \item If the page shows no data, verify that any referenced statistics endpoint
-        (for example, \texttt{/api/stats}) is reachable:
+  \item \textbf{404 Not Found:} Ensure \texttt{dashboard.html} is present in
+        the document root defined in \texttt{server.conf}.
+  \item \textbf{Disconnected Status:} The indicator will turn red if
+        \texttt{/api/stats} is unreachable or returns invalid JSON. Verify the
+        backend implementation with:
         \begin{lstlisting}[language=bash]
         curl http://localhost:8080/api/stats
         \end{lstlisting}
-  \item If changes to the page or scripts are not visible, clear the browser cache
-        or force a reload with \texttt{Ctrl + F5}.
+  \item \textbf{Chart Not Updating:} Clear browser cache or refresh the page.
 \end{itemize}
----
+
+\paragraph{Summary.}
+The Web Dashboard provides an intuitive and visually rich way to monitor
+the HTTP server’s real-time performance. It requires no installation or
+additional dependencies and is accessible at:
+\begin{center}
+\textbf{\texttt{http://localhost:8080/dashboard.html}}
+\end{center}
+
+ 
 
 \subsection{Graceful Shutdown}
 To terminate the server, use:
@@ -637,7 +674,7 @@ ipcs -s    # Semaphores
 \end{lstlisting}
 No remaining entries should appear under the server’s process user.
 
----
+ 
 
 % 7. TROUBLESHOOTING
 % =================================================================
@@ -685,7 +722,7 @@ LDFLAGS += -lrt
 \end{lstlisting}
 (Already included by default in this project.)
 
----
+ 
 
 \subsection{Configuration and Startup Issues}
 
@@ -708,7 +745,7 @@ Another process (possibly a previous server instance) is already listening on th
   \item Alternatively, change the port in \texttt{server.conf} to an unused value (e.g., 8081).
 \end{itemize}
 
----
+ 
 
 \paragraph{4. “Permission Denied” on Low Ports.}
 \textbf{Symptom:}
@@ -725,7 +762,7 @@ Either use a non-privileged port (e.g., 8080) in \texttt{server.conf}, or start 
 sudo ./bin/webserver
 \end{lstlisting}
 
----
+ 
 
 \paragraph{5. Missing or Invalid Document Root.}
 \textbf{Symptom:}
@@ -743,7 +780,7 @@ mkdir -p www
 echo "<h1>Server is running!</h1>" > www/index.html
 \end{lstlisting}
 
----
+ 
 
 \paragraph{6. Invalid Configuration Entries.}
 \textbf{Symptom:}
@@ -760,7 +797,7 @@ Edit \texttt{server.conf} to ensure all values are positive integers:
 THREADS_PER_WORKER = 4
 \end{lstlisting}
 
----
+ 
 
 \subsection{Runtime and Concurrency Issues}
 
@@ -780,7 +817,7 @@ make run
 \end{lstlisting}
 Check for errors such as “Failed to fork worker” or “Invalid socket descriptor.”
 
----
+ 
 
 \paragraph{8. Interleaved or Corrupted Logs.}
 \textbf{Symptom:}  
@@ -797,7 +834,7 @@ make run
 \end{lstlisting}
 The \texttt{master.c} process recreates the semaphore on startup.
 
----
+ 
 
 \paragraph{9. Shared Memory Not Released After Shutdown.}
 \textbf{Symptom:}
@@ -818,7 +855,7 @@ ipcrm -s 54321   # Semaphore
 \end{lstlisting}
 Then restart the server using \texttt{make run}.
 
----
+ 
 
 \paragraph{10. High CPU Usage or Slow Response.}
 \textbf{Cause:}  
@@ -830,7 +867,7 @@ Increase \texttt{THREADS\_PER\_WORKER} and \texttt{CACHE\_SIZE\_MB} in \texttt{s
 ab -n 100 -c 10 http://127.0.0.1:8080/
 \end{lstlisting}
 
----
+ 
 
 \subsection{Testing and Validation Problems}
 
@@ -849,7 +886,7 @@ chmod +x tests/*.sh
 make test
 \end{lstlisting}
 
----
+ 
 
 \paragraph{12. Stress Test Hangs Indefinitely.}
 \textbf{Cause:}  
@@ -861,7 +898,7 @@ Thread pool exhaustion or blocked request queue due to oversized \texttt{MAX\_QU
   \item Monitor shared memory statistics using \texttt{./bin/stats\_reader}.
 \end{itemize}
 
----
+ 
 \begin{lstlisting}[language=bash]
 make debug
 ./bin/webserver
