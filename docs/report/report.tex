@@ -300,7 +300,7 @@ Access to the buffer is controlled by two semaphores:
 \end{itemize}
 
 \paragraph{Shared Statistics and Atomicity.}
-Global runtime metrics---including total requests served, bytes transmitted, and cache hit/miss counters---are stored in a POSIX shared memory region managed by \texttt{src/shared\_mem.c}.  
+Global runtime metrics, including total requests served, bytes transmitted, and cache hit/miss counters, are stored in a POSIX shared memory region managed by \texttt{src/shared\_mem.c}.  
 All accesses are wrapped in critical sections protected by binary semaphores.  
 This ensures atomicity of operations such as:
 \begin{verbatim}
@@ -374,7 +374,40 @@ This prevents memory leaks and ensures that all file descriptors and dynamically
 % Request parsing and response construction.
 % Error handling (404, 403, 500).
 % Reference: src/http_parser.c, src/http_builder.c
+The HTTP layer is responsible for interpreting client requests and generating
+valid responses. It is implemented through two core modules:
+\texttt{http\_parser.c} and \texttt{http\_builder.c}, which together handle
+message parsing, header construction, and delivery to the client socket.
 
+\paragraph{Request Handling.}
+Each worker thread receives raw data from the client socket and invokes the parser to
+extract the method, resource path, and protocol version. Optional headers such as
+\texttt{Range} are also recognized, enabling support for partial content delivery.
+The parser performs minimal tokenization and boundary validation, storing the
+result in a compact structure that represents the parsed request. Invalid or malformed
+requests trigger a direct \texttt{400 Bad Request} response.
+
+\paragraph{Response Generation.}
+Once a request has been validated and the corresponding file located (either from
+cache or disk), the builder module assembles the complete HTTP response. This includes
+the status line, headers such as \texttt{Content-Type}, \texttt{Content-Length},
+and \texttt{Connection}, and the optional body. Specialized routines also support
+partial responses for range requests, enabling clients to resume interrupted
+downloads. Responses are sent directly through the socket using formatted writes
+to ensure efficient transmission.
+
+\paragraph{Error Responses.}
+For failed operations, such as missing files or internal I/O errors, the server emits
+concise HTML error pages with status codes \texttt{404} or \texttt{500}. These are
+generated dynamically using a standard template, ensuring consistent presentation
+across error types.
+
+\paragraph{Performance and Extensibility.}
+The separation between request parsing and response construction ensures a clear
+processing pipeline, minimizing contention and simplifying maintenance. This modular
+design supports high throughput under concurrent workloads and can be easily extended
+to accommodate new request types, caching strategies, or content-handling features
+without altering the core logic of the server.
 % ----------------------------------------------------------------------
 % 3. Challenges and Solutions
 % ----------------------------------------------------------------------
