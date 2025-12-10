@@ -1,16 +1,31 @@
 \babel@toc {english}{}\relax 
 \contentsline {section}{\numberline {1}Architecture Overview}{2}{section.1}%
 \contentsline {subsection}{\numberline {1.1}Process Model}{2}{subsection.1.1}%
-\contentsline {section}{\numberline {2}Shared Data Structures}{2}{section.2}%
-\contentsline {subsection}{\numberline {2.1}Memory Layout}{2}{subsection.2.1}%
-\contentsline {subsection}{\numberline {2.2}Circular Buffer (Producer-Consumer)}{2}{subsection.2.2}%
-\contentsline {section}{\numberline {3}Synchronization Mechanisms}{2}{section.3}%
-\contentsline {subsection}{\numberline {3.1}Process Synchronization (Semaphores)}{2}{subsection.3.1}%
-\contentsline {subsection}{\numberline {3.2}Thread Synchronization (Mutex \& Cond Vars)}{3}{subsection.3.2}%
-\contentsline {section}{\numberline {4}Component Design}{3}{section.4}%
-\contentsline {subsection}{\numberline {4.1}LRU Cache}{3}{subsection.4.1}%
-\contentsline {subsection}{\numberline {4.2}Thread-Safe Logging}{3}{subsection.4.2}%
-\contentsline {section}{\numberline {5}System Lifecycle}{3}{section.5}%
-\contentsline {subsection}{\numberline {5.1}Initialization}{3}{subsection.5.1}%
-\contentsline {subsection}{\numberline {5.2}Shutdown (Graceful Exit)}{3}{subsection.5.2}%
-\contentsline {section}{\numberline {6}Flowcharts}{3}{section.6}%
+\contentsline {subsection}{\numberline {1.2}Thread Model}{2}{subsection.1.2}%
+\contentsline {subsection}{\numberline {1.3}Coordination and Synchronization}{2}{subsection.1.3}%
+\contentsline {subsection}{\numberline {1.4}Design Rationale}{3}{subsection.1.4}%
+\contentsline {section}{\numberline {2}Shared Data Structures}{3}{section.2}%
+\contentsline {subsection}{\numberline {2.1}Memory Layout}{3}{subsection.2.1}%
+\contentsline {subsection}{\numberline {2.2}Circular Buffer}{3}{subsection.2.2}%
+\contentsline {subsection}{\numberline {2.3}Global Statistics}{3}{subsection.2.3}%
+\contentsline {subsection}{\numberline {2.4}Synchronization Lifecycle}{4}{subsection.2.4}%
+\contentsline {section}{\numberline {3}Synchronization Mechanisms}{4}{section.3}%
+\contentsline {subsection}{\numberline {3.1}Process Synchronization (Named Semaphores)}{4}{subsection.3.1}%
+\contentsline {subsection}{\numberline {3.2}Thread Synchronization (Mutex \& Condition Variables)}{4}{subsection.3.2}%
+\contentsline {section}{\numberline {4}Component Design}{5}{section.4}%
+\contentsline {subsection}{\numberline {4.1}LRU Cache}{5}{subsection.4.1}%
+\contentsline {paragraph}{Structures.}{5}{section*.2}%
+\contentsline {paragraph}{Concurrency.}{5}{section*.3}%
+\contentsline {paragraph}{Operation.}{5}{section*.4}%
+\contentsline {paragraph}{Integration.}{5}{section*.5}%
+\contentsline {subsection}{\numberline {4.2}Thread-Safe Logging}{6}{subsection.4.2}%
+\contentsline {paragraph}{API.}{6}{section*.6}%
+\contentsline {paragraph}{Synchronization.}{6}{section*.7}%
+\contentsline {paragraph}{Rotation \& Buffering.}{6}{section*.8}%
+\contentsline {paragraph}{Integration.}{6}{section*.9}%
+\contentsline {section}{\numberline {5}System Lifecycle}{6}{section.5}%
+\contentsline {subsection}{\numberline {5.1}Initialization}{6}{subsection.5.1}%
+\contentsline {subsection}{\numberline {5.2}Steady Operation}{7}{subsection.5.2}%
+\contentsline {subsection}{\numberline {5.3}Graceful Shutdown}{7}{subsection.5.3}%
+\contentsline {subsection}{\numberline {5.4}Error Recovery}{7}{subsection.5.4}%
+\contentsline {section}{\numberline {6}Flowcharts}{7}{section.6}%

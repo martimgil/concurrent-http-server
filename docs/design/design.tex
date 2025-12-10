@@ -29,7 +29,7 @@
     \large Multi-Threaded Web Server with IPC
 }
 \author{
-    Martim Gil (ID: [XXXXX]) \\
+    Martim Gil (ID: [124833]) \\
     Nuno Leite Faria (ID: 112994) \\
     \textit{Operating Systems - University of Aveiro}
 }
@@ -106,10 +106,6 @@ connection management and system orchestration, while workers specialize in
 request handling. The use of shared memory for lightweight signaling and
 descriptor passing through UNIX domain sockets minimizes communication
 overhead and preserves process isolation.  
-This design yields a scalable, fault-tolerant server capable of leveraging
-multi-core systems effectively while maintaining predictable and stable
-performance.
-
 
 % ----------------------------------------------------------------------
 % 2. SHARED DATA STRUCTURES
@@ -305,21 +301,6 @@ The Master logs accepts and lifecycle events; Workers log per-request lines with
 
 
 % ----------------------------------------------------------------------
-\subsection{Summary}
-
-\begin{table}[H]
-\centering
-\begin{tabular}{|l|l|p{7cm}|}
-\hline
-\textbf{Component} & \textbf{Synchronization} & \textbf{Purpose} \\ \hline
-Cache & \texttt{pthread\_rwlock\_t} & Multi-reader/single-writer protection for static file caching. \\ \hline
-Logger & \texttt{sem\_t *log\_mutex} & Serializes access to shared log file across all processes. \\ \hline
-Threaded Logger & \texttt{pthread\_mutex\_t}, \texttt{pthread\_cond\_t} & Asynchronous batched logging for reduced I/O contention. \\ \hline
-\end{tabular}
-\caption{Component Synchronization Summary}
-\end{table}
-
-% ----------------------------------------------------------------------
 % 5. SYSTEM LIFECYCLE
 % ----------------------------------------------------------------------
 \section{System Lifecycle}
@@ -334,7 +315,7 @@ initializes its local components (cache, logger, and thread pool), and waits for
 to arrive through the interprocess queue.
 
 \subsection{Steady Operation}
-During normal execution, the Master continuously accepts new client connections and
+During normal execution, the Master accepts new client connections and
 enqueues them into the shared circular buffer. Each Worker dequeues available requests,
 dispatching them to a thread pool that handles HTTP parsing, response generation, cache
 lookup, and logging. Shared statistics are updated atomically under semaphore
