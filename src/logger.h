@@ -7,7 +7,7 @@
 // ###############################################################################################################
 // Thread-Safe & Process-Safe Logger (Feature 5)
 //
-// This module implements a logging system that is safe for use by multiple processes (master + workers)
+// This implements a logging system that is safe for use by multiple processes (master + workers)
 // and multiple threads (within each worker).
 //
 // Log file writing is protected by:

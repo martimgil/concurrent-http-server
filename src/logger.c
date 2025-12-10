@@ -172,6 +172,7 @@ void logger_close() {
     // Close semaphore
     if (g_sem) {
         sem_close(g_sem);
+        g_sem = NULL;  // Clear pointer to avoid dangling reference
     }
 }
 

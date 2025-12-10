@@ -10,7 +10,7 @@
 // =============================================================================
 // FILE CACHE IMPLEMENTATION WITH HASH TABLE AND LRU
 // =============================================================================
-// This implementation provides a thread-safe file cache using:
+// This provides a thread-safe file cache using:
 // - A hash table for fast entry lookups.
 // - A doubly linked list for LRU (Least Recently Used) management.
 // - Mutex for synchronization in multi-threaded environments.

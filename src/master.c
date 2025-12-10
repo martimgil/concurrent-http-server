@@ -373,7 +373,7 @@ int main(int argc, char* argv[]) {
     memset(&sa_chld, 0, sizeof(sa_chld));
     sa_chld.sa_handler = sigchld_handler;
     sigemptyset(&sa_chld.sa_mask);
-    sa_chld.sa_flags = SA_RESTART | SA_NOCLDSTOP;  // Can restart, we don't want spurious wakeups
+    sa_chld.sa_flags = SA_RESTART | SA_NOCLDSTOP;  // Can restart, don't want spurious wakeups
     sigaction(SIGCHLD, &sa_chld, NULL);
     
     // Ignore SIGPIPE

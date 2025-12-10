@@ -9,7 +9,7 @@
 typedef struct file_cache file_cache_t; // File cache structure
 typedef struct cache_entry cache_entry_t; // Cache entry structure
 
-/* Handle "pinned" to prevent eviction while in use */
+/* Handle pinned to prevent eviction while in use */
 typedef struct {
     const uint8_t *data;    /* Read-only pointer to file contents */
     size_t size;            /* File size in bytes */
@@ -22,7 +22,7 @@ file_cache_t *cache_create(size_t capacity_bytes);
 /* Destroy the cache and free all memory */
 void cache_destroy(file_cache_t *cache);
 
-/* Try to acquire (pin) an existing entry. Returns true on success */
+/* Try to acquire an existing entry. Returns true on success */
 bool cache_acquire(file_cache_t *cache, const char *key, cache_handle_t *out);
 
 /* Release the pin on an entry */

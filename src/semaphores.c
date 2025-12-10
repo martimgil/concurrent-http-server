@@ -90,3 +90,37 @@ void __attribute__((no_sanitize("thread"))) destroy_semaphores(semaphores_t* sem
     sem_unlink("/ws_stats_mutex");
     sem_unlink("/ws_log_mutex");
 }
+
+// Function to close semaphores without unlinking (for worker processes)
+// Workers inherit semaphores from master via fork() and must close them
+// before exit to avoid memory leaks, but should NOT unlink them
+// Arguments:
+// sems - Pointer to the semaphores_t structure to be closed
+
+void __attribute__((no_sanitize("thread"))) close_semaphores(semaphores_t* sems) {
+
+    // Validate input parameter -> Check if the pointer is NULL
+    if (!sems){
+        return;
+    };
+
+    // Close each semaphore (do NOT unlink - only master should unlink)
+    // sem_close -> Close the named semaphore
+
+    if (sems->empty_slots && sems->empty_slots != SEM_FAILED) {
+        sem_close(sems->empty_slots);
+    }
+    if (sems->filled_slots && sems->filled_slots != SEM_FAILED) {
+        sem_close(sems->filled_slots);
+    }
+    if (sems->queue_mutex && sems->queue_mutex != SEM_FAILED) {
+        sem_close(sems->queue_mutex);
+    }
+    if (sems->stats_mutex && sems->stats_mutex != SEM_FAILED) {
+        sem_close(sems->stats_mutex);
+    }
+    if (sems->log_mutex && sems->log_mutex != SEM_FAILED) {
+        sem_close(sems->log_mutex);
+    }
+}
+

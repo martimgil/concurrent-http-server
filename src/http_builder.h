@@ -4,7 +4,7 @@
 #include <stddef.h> // size_t
 
 // Sends an HTTP response.
-// The 'keep_alive' parameter (1 or 0) sets the header to "Connection: keep-alive" or "close".
+// The keep_alive parameter (1 or 0) sets the header to "Connection: keep-alive" or "close".
 void send_http_response(int fd, int status, const char* status_msg, 
                         const char* content_type, const char* body, size_t body_len, 
                         int keep_alive);

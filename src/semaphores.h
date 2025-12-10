@@ -23,5 +23,11 @@ int init_semaphores(semaphores_t* sems, int queue_size);
 // sems - Pointer to the semaphores_t structure to be destroyed
 void destroy_semaphores(semaphores_t* sems);
 
+// Function to close semaphores without unlinking (for worker processes)
+// Workers should call this before exit to properly release resources
+// Arguments:
+// sems - Pointer to the semaphores_t structure to be closed
+void close_semaphores(semaphores_t* sems);
+
 
 #endif

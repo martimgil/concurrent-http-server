@@ -438,4 +438,11 @@ void worker_main(shared_data_t* shm, semaphores_t* sems, int worker_id, int chan
 
     // Destroy worker-specific resources (cache, logger, etc.)
     worker_shutdown_resources();
+
+    // Close inherited semaphores (do not unlink - master will do that)
+    close_semaphores(sems);
+
+    // Close the channel file descriptor
+    close(channel_fd);
 }
+
