@@ -107,6 +107,12 @@ request handling. The use of shared memory for lightweight signaling and
 descriptor passing through UNIX domain sockets minimizes communication
 overhead and preserves process isolation.  
 
+\textbf{Note on Descriptor Passing Implementation:} While the project requirements suggest a shared memory queue for connection distribution, standard POSIX process isolation prevents the direct sharing of open file descriptors (sockets) purely through shared memory integers. Therefore, this architecture implements:
+\begin{itemize}
+    \item \textbf{Shared Memory Queue:} Used for synchronization (managing empty/filled slots) and task assignment (tracking which worker is busy).
+    \item \textbf{Unix Domain Sockets:} Used as the transport mechanism to securely pass the actual socket file descriptor from Master to Worker using \texttt{SCM\_RIGHTS} ancillary data.
+\end{itemize}
+
 % ----------------------------------------------------------------------
 % 2. SHARED DATA STRUCTURES
 % ----------------------------------------------------------------------

@@ -1,5 +1,5 @@
 # Fdb version 4
-["pdflatex"] 1765381506.39823 "/home/martimgil/Documents/Trabalho2_SO/docs/design/design.tex" "design.pdf" "design" 1765381506.78328 0
+["pdflatex"] 1765383581.847 "/home/martimgil/Documents/Trabalho2_SO/docs/design/design.tex" "design.pdf" "design" 1765383582.2384 0
   "/etc/texmf/web2c/texmf.cnf" 1763149566.21733 475 c0e671620eb5563b2130f56340a5fde8 ""
   "/home/martimgil/.texlive2023/texmf-var/fonts/pk/ljfour/jknappen/ec/ecbx1200.600pk" 1763217169.61609 31928 0eddabbfb4216a4571d86e6afc225d07 ""
   "/home/martimgil/.texlive2023/texmf-var/fonts/pk/ljfour/jknappen/ec/ecbx1440.600pk" 1763153921.5103 40112 0417eebec16e1681de0766d2b921754b ""
@@ -13,7 +13,7 @@
   "/home/martimgil/.texlive2023/texmf-var/fonts/pk/ljfour/jknappen/ec/ectt1095.600pk" 1764868430.06414 21952 ae00fb146493e207ba436b71d56b965a ""
   "/home/martimgil/.texlive2023/texmf-var/fonts/pk/ljfour/jknappen/ec/ectt1200.600pk" 1764868430.52514 24132 8d0ce80232d1d84b561844f407a24090 ""
   "/home/martimgil/.texlive2023/texmf-var/fonts/pk/ljfour/jknappen/ec/tcrm1200.600pk" 1764865327.04232 14040 ce399ac02a679feb3971e462ba61d109 ""
-  "/home/martimgil/Documents/Trabalho2_SO/docs/design/design.tex" 1765381506.20328 15463 3b2f468e07233f52b9e4817ddc7164d2 ""
+  "/home/martimgil/Documents/Trabalho2_SO/docs/design/design.tex" 1765383581.66297 16148 fa12152394903c801edacd081721699c ""
   "/usr/share/texlive/texmf-dist/fonts/map/fontname/texfonts.map" 1577235249 3524 cb3e574dea2d1052e39280babc910dc8 ""
   "/usr/share/texlive/texmf-dist/fonts/tfm/jknappen/ec/ecbx1200.tfm" 1136768653 3584 402da0b29eafbad07963b1224b222f18 ""
   "/usr/share/texlive/texmf-dist/fonts/tfm/jknappen/ec/ecbx1440.tfm" 1136768653 3584 13049b61b922a28b158a38aeff75ee9b ""
@@ -103,10 +103,10 @@
   "/usr/share/texmf/web2c/texmf.cnf" 1707919699 40399 f2c302f7d2af602abb742093540a5834 ""
   "/var/lib/texmf/fonts/map/pdftex/updmap/pdftex.map" 1763472103.96559 128028 f533b797fba58d231669ea19e894e23e ""
   "/var/lib/texmf/web2c/pdftex/pdflatex.fmt" 1763472148 6800791 1c533c7e200f5e0a86a8ad65ae6604e3 ""
-  "design.aux" 1765381506.73278 4107 33ba29ecdf1139684e92a3e427c17030 "pdflatex"
-  "design.out" 1765381506.73278 3467 3126e0d4962eff609785c51e54c17a26 "pdflatex"
-  "design.tex" 1765381506.20328 15463 3b2f468e07233f52b9e4817ddc7164d2 ""
-  "design.toc" 1765381506.73356 2311 031b5b9788f448bb9f0a8498c2dc2e3f "pdflatex"
+  "design.aux" 1765383582.18639 4107 40fc6deca641cd28a30f4b91df459500 "pdflatex"
+  "design.out" 1765383582.18739 3467 3126e0d4962eff609785c51e54c17a26 "pdflatex"
+  "design.tex" 1765383581.66297 16148 fa12152394903c801edacd081721699c ""
+  "design.toc" 1765383582.18739 2311 0641f497a358e33e6b568b762a129c71 "pdflatex"
   (generated)
   "design.aux"
   "design.log"
