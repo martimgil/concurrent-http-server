@@ -1,6 +1,6 @@
 # Concurrent HTTP Web Server (SO-TP2)
 
-A high-performance, multi-threaded HTTP server implemented in C for the Operating Systems course. 
+A multi-threaded HTTP server implemented in C for the Operating Systems course. 
 This server uses a Master-Worker architecture with POSIX Shared Memory, Semaphores, and Unix Domain Sockets.
 
 ## Features
