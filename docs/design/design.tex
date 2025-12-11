@@ -1,47 +1,134 @@
-    \documentclass[a4paper,12pt]{article}
+\documentclass[a4paper,12pt]{article}
+
+% --- Essential Packages ---
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[english]{babel}
+\usepackage{geometry}
+\usepackage{graphicx}
+\usepackage{hyperref}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{float}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{enumitem}
+\usepackage{booktabs}
+\usepackage{parskip}
+\usepackage{tikz}
+\usepackage{adjustbox}
+\usetikzlibrary{shapes.geometric, arrows.meta, positioning, fit, backgrounds, calc}
+
+% --- Page Configuration ---
+\geometry{margin=2.5cm, top=3cm, bottom=3cm}
+
+% --- Color Scheme ---
+\definecolor{codegray}{gray}{0.95}
+
+% --- Hyperlink Configuration ---
+\hypersetup{
+    colorlinks=true,
+    linkcolor=black,
+    urlcolor=black,
+    citecolor=black,
+    pdftitle={Design Document - Concurrent HTTP Web Server},
+    pdfauthor={Martim Gil, Nuno Leite Faria}
+}
+
+% --- Code Style ---
+\lstset{
+    backgroundcolor=\color{codegray},
+    basicstyle=\ttfamily\small,
+    breaklines=true,
+    frame=single,
+    framerule=0.5pt,
+    rulecolor=\color{black},
+    numbers=left,
+    numberstyle=\tiny,
+    captionpos=b,
+    keywordstyle=\bfseries,
+    commentstyle=\itshape,
+    stringstyle=\ttfamily,
+    showstringspaces=false,
+    tabsize=4,
+    xleftmargin=1em,
+    xrightmargin=1em,
+    aboveskip=1em,
+    belowskip=1em,
+    language=C
+}
+
+% --- Header and Footer ---
+\setlength{\headheight}{14pt}
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\small\textit{Concurrent HTTP Web Server}}
+\fancyhead[R]{\small\textit{Design Document}}
+\fancyfoot[C]{\thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+\renewcommand{\footrulewidth}{0pt}
+
+% --- Section Styling ---
+\titleformat{\section}{\Large\bfseries}{\thesection}{1em}{}
+\titleformat{\subsection}{\large\bfseries}{\thesubsection}{1em}{}
+\titleformat{\subsubsection}{\normalsize\bfseries}{\thesubsubsection}{1em}{}
+
+% --- List Styling ---
+\setlist[itemize]{noitemsep, topsep=0.5em}
+\setlist[enumerate]{noitemsep, topsep=0.5em}
+
+\begin{document}
+
+% =================================================================
+% TITLE PAGE
+% =================================================================
+\begin{titlepage}
+    \centering
     
-    % --- Essential Packages ---
-    \usepackage[utf8]{inputenc}
-    \usepackage[T1]{fontenc}
-    \usepackage[english]{babel}
-    \usepackage{geometry}
-    \usepackage{graphicx}
-    \usepackage{hyperref}
-    \usepackage{listings}
-    \usepackage{xcolor}
-    \usepackage{float}
-    \usepackage{tikz}
-    \usetikzlibrary{shapes.geometric, arrows.meta, positioning, fit, backgrounds, calc}
+    % --- DETI Logo ---
+    \vspace*{2cm}
+    \includegraphics[width=0.7\textwidth]{deti.png}
     
-    % --- Configuration ---
-    \geometry{margin=2.5cm}
-    \definecolor{codegray}{rgb}{0.95,0.95,0.95}
-    \lstset{
-        backgroundcolor=\color{codegray},
-        basicstyle=\ttfamily\small,
-        breaklines=true,
-        frame=single,
-        numbers=left,
-        language=C
-    }
+    \vspace{3cm}
     
-    % --- Metadata ---
-    \title{
-        \textbf{Design Document}\\
-        \large Multi-Threaded Web Server with IPC
-    }
-    \author{
-        Martim Gil (ID: 124833) \\
-        Nuno Leite Faria (ID: 112994) \\
-        \textit{Operating Systems - University of Aveiro}
-    }
-    \date{\today}
+    % --- Document Title ---
+    {\Huge\textbf{Design Document}}\\[0.5cm]
+    {\LARGE Concurrent HTTP Web Server}
     
-    \begin{document}
+    \vspace{1.5cm}
     
-    \maketitle
-    \tableofcontents
-    \newpage
+    % --- Decorative Line ---
+    \rule{0.6\textwidth}{0.5pt}
+    
+    \vspace{1.5cm}
+    
+    % --- Course Information ---
+    {\Large\textbf{Operating Systems}}\\[0.3cm]
+    {\large Academic Year 2024/2025}
+    
+    \vspace{2cm}
+    
+    % --- Authors ---
+    \begin{tabular}{cc}
+        \textbf{Martim Gil} & \textbf{Nuno Leite Faria} \\
+        Student ID: 124833 & Student ID: 112994 \\
+    \end{tabular}
+    
+    \vspace{1.5cm}
+    
+    % --- Supervisor ---
+    {\large Supervisor: Prof. Pedro Azevedo Fernandes}
+    
+    \vfill
+    
+    % --- Date ---
+    {\large \today}
+    
+\end{titlepage}
+
+% --- Table of Contents ---
+\tableofcontents
+\newpage
     
     % ----------------------------------------------------------------------
     \section{Architecture Overview}
@@ -282,6 +369,7 @@
     
 \begin{figure}[H]
 \centering
+\resizebox{\textwidth}{!}{%
 \begin{tikzpicture}[
             node distance=1.5cm,
             auto,
@@ -292,10 +380,8 @@
         
         % --- Columns ---
         \node (master) [align=center] {\textbf{Master Process} \\ (Producer)};
-        \node (shm) [right=4cm of master, align=center] {\textbf{Shared Memory} \\ (Critical Section)};
-        \node (worker) [right=4cm of shm, align=center] {\textbf{Worker Process} \\ (Consumer)};
-
-
+        \node (shm) [right=3cm of master, align=center] {\textbf{Shared Memory} \\ (Critical Section)};
+        \node (worker) [right=3cm of shm, align=center] {\textbf{Worker Process} \\ (Consumer)};
 
         % --- Master Flow ---
         \node[block, fill=blue!10, below=1cm of master] (m_wait) {\texttt{sem\_wait}\\(empty)};
@@ -312,28 +398,21 @@
         \node[block, fill=blue!10, below=0.5cm of w_unlock] (w_signal) {\texttt{sem\_post}\\(empty)};
 
         % --- Arrows interacting with Critical Section ---
-        
-        % Master entering/leaving
         \draw[->, thick, red] (m_write.east) -- node[above, font=\tiny] {Write} (shm |- m_write);
-        
-        % Worker entering/leaving
         \draw[<-, thick, blue] (shm |- w_read) -- node[above, font=\tiny] {Read} (w_read.west);
 
         % --- Sequence Lines ---
-        % Master
         \draw[->] (master) -- (m_wait);
         \draw[->] (m_wait) -- (m_lock);
         \draw[->] (m_lock) -- (m_write);
         \draw[->] (m_write) -- (m_unlock);
         \draw[->] (m_unlock) -- (m_signal);
 
-        % Worker
         \draw[->] (worker) -- (w_wait);
         \draw[->] (w_wait) -- (w_lock);
         \draw[->] (w_lock) -- (w_read);
         \draw[->] (w_read) -- (w_unlock);
         \draw[->] (w_unlock) -- (w_signal);
-
 
         % --- Cross-Process Signal ---
         \draw[->, dotted, thick] (m_signal) -- node[above, sloped, font=\footnotesize] {Signal (filled)} (w_wait);
@@ -344,7 +423,8 @@
         \draw[thick, gray, dashed] (shm) -- (shm |- bottom_y);
         \draw[thick, gray, dashed] (worker) -- (worker |- bottom_y);
 
-\end{tikzpicture}
+\end{tikzpicture}%
+}
 \caption{Producer-Consumer Synchronization Logic preventing Deadlocks}
 \label{fig:sync_logic}
 \end{figure}
@@ -356,7 +436,7 @@
       \item \textbf{\texttt{pthread\_cond\_t}} — allows worker threads to sleep when the queue is empty and wake on job submission or shutdown.
     \end{itemize}
     
-    Threads block on \texttt{pthread\_cond\_wait} when there is no work and are released by \texttt{pthread\_cond\_signal}/\texttt{broadcast} on submission or shutdown, ensuring stable throughput without busy-waiting.
+    Threads block on \texttt{pthread\_cond\_wait} when there is no work. They are released by \texttt{pthread\_cond\_signal} or \texttt{pthread\_cond\_broadcast} on submission or shutdown, ensuring stable throughput without busy-waiting.
     
     % ----------------------------------------------------------------------
     % 4. COMPONENT DESIGN
@@ -455,12 +535,13 @@
     
     \begin{table}[H]
     \centering
-    \begin{tabular}{|l|l|p{7cm}|}
+    \small
+    \begin{tabular}{|l|l|p{5.5cm}|}
     \hline
     \textbf{Component} & \textbf{Synchronization} & \textbf{Purpose} \\ \hline
     Cache & \texttt{pthread\_rwlock\_t} & Multi-reader/single-writer protection for static file caching. \\ \hline
-    Logger & \texttt{sem\_t *log\_mutex} & Serializes access to shared log file across all processes. \\ \hline
-    Threaded Logger & \texttt{pthread\_mutex\_t}, \texttt{pthread\_cond\_t} & Asynchronous batched logging for reduced I/O contention. \\ \hline
+    Logger & \texttt{sem\_t *} & Serializes log file access across all processes. \\ \hline
+    Threaded Logger & \texttt{mutex + cond\_t} & Async batched logging for reduced I/O contention. \\ \hline
     \end{tabular}
     \caption{Component Synchronization Summary}
     \end{table}
@@ -509,61 +590,51 @@
     
 \begin{figure}[H]
     \centering
+    \resizebox{0.95\textwidth}{!}{%
     \begin{tikzpicture}[
-        node distance=1.5cm,
-        startstop/.style={rectangle, rounded corners, minimum width=3cm, minimum height=1cm, text centered, draw=black, fill=red!10},
-        process/.style={rectangle, minimum width=3cm, minimum height=1cm, text centered, draw=black, fill=blue!10},
-        decision/.style={diamond, minimum width=3cm, minimum height=1cm, text centered, draw=black, fill=green!10, aspect=2},
+        node distance=1.3cm,
+        startstop/.style={rectangle, rounded corners, minimum width=2.5cm, minimum height=0.9cm, text centered, draw=black, fill=red!10},
+        process/.style={rectangle, minimum width=2.5cm, minimum height=0.9cm, text centered, draw=black, fill=blue!10},
+        decision/.style={diamond, minimum width=2.5cm, minimum height=0.9cm, text centered, draw=black, fill=green!10, aspect=2},
         arrow/.style={thick,->,>=Stealth}
     ]
 
     % --- NODES ---
-    
-    % 1. Start
     \node (start) [startstop] {Client Connection};
-    
-    % 2. Master Steps
     \node (accept) [process, below of=start] {Master: Accept \& Enqueue};
-    
-    % 3. Worker Pickup
     \node (worker) [process, below of=accept] {Worker: Dequeue \& Parse};
-    
-    % 4. Cache Decision
-    \node (decide) [decision, below of=worker, yshift=-0.5cm] {In Cache?};
+    \node (decide) [decision, below of=worker, yshift=-0.4cm] {In Cache?};
     
     % 5. Branches
-    \node (read_disk) [process, right=3cm of decide] {Read from Disk};
-    \node (update_cache) [process, below of=read_disk] {Update Cache (Write Lock)};
-    
-    \node (read_mem) [process, left=3cm of decide] {Read from Memory (Read Lock)};
+    \node (read_disk) [process, right=2cm of decide] {Read from Disk};
+    \node (update_cache) [process, below of=read_disk] {Update Cache};
+    \node (read_mem) [process, left=2cm of decide] {Read from Memory};
     
     % 6. Response
-    \node (build) [process, below=3cm of decide] {Build HTTP Response};
-    
-    % 7. Finalize
+    \node (build) [process, below=2.5cm of decide] {Build HTTP Response};
     \node (log) [process, below of=build] {Update Stats \& Log};
     \node (end) [startstop, below of=log] {Close Connection};
 
     % --- ARROWS ---
-    
     \draw [arrow] (start) -- (accept);
-    \draw [arrow] (accept) -- node[right] {FD via Unix Socket} (worker);
+    \draw [arrow] (accept) -- node[right, font=\small] {FD via Unix Socket} (worker);
     \draw [arrow] (worker) -- (decide);
     
     % Cache Miss Path
-    \draw [arrow] (decide) -- node[above] {No (Miss)} (read_disk);
+    \draw [arrow] (decide) -- node[above, font=\small] {No} (read_disk);
     \draw [arrow] (read_disk) -- (update_cache);
     \draw [arrow] (update_cache) |- (build);
     
     % Cache Hit Path
-    \draw [arrow] (decide) -- node[above] {Yes (Hit)} (read_mem);
+    \draw [arrow] (decide) -- node[above, font=\small] {Yes} (read_mem);
     \draw [arrow] (read_mem) |- (build);
     
     % Final Path
     \draw [arrow] (build) -- (log);
     \draw [arrow] (log) -- (end);
 
-    \end{tikzpicture}
+    \end{tikzpicture}%
+    }
     \caption{Flowchart of an HTTP Request Lifecycle within the Server}
     \label{fig:flowchart}
 \end{figure}
