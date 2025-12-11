@@ -147,10 +147,10 @@
     \begin{itemize}
         \item \textbf{Master:} Initializes configuration parameters, binds the listening
               socket, and accepts incoming TCP connections. Each accepted connection
-              is first represented as a lightweight descriptor stored in a bounded
+              is first represented as a descriptor stored in a bounded
               shared-memory queue, protected by semaphores. The master then transfers
               the corresponding client file descriptor to the designated worker via
-              a UNIX domain socket using \texttt{SCM\_RIGHTS}. This hybrid approach
+              a UNIX domain socket using \texttt{SCM\_RIGHTS}. This approach
               combines efficient interprocess signaling with safe descriptor passing.
         \item \textbf{Workers:} Spawned by the master at startup, each worker waits for
               connection assignments in the shared queue. Upon notification, it
@@ -543,8 +543,17 @@
     Logger & \texttt{sem\_t *} & Serializes log file access across all processes. \\ \hline
     Threaded Logger & \texttt{mutex + cond\_t} & Async batched logging for reduced I/O contention. \\ \hline
     \end{tabular}
-    \caption{Component Synchronization Summary}
+    \caption{Component Synchronization Summary}    
+
     \end{table}
+
+
+    \subsection{Real-time Statistics Dashboard (Bonus)}
+
+    The server implements a dedicated API endpoint at \texttt{/api/stats}. 
+    Unlike static file serving, this endpoint bypasses the disk cache and reads directly from the global \texttt{server\_stats\_t} structure in shared memory.
+
+    The architecture supports a JavaScript-based dashboard (\texttt{dashboard.html}) that polls this endpoint, rendering real-time graphs of throughput and latency. 
     
     % ----------------------------------------------------------------------
     % 5. SYSTEM LIFECYCLE
