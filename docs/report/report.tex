@@ -408,6 +408,33 @@ processing pipeline, minimizing contention and simplifying maintenance. This mod
 design supports high throughput under concurrent workloads and can be easily extended
 to accommodate new request types, caching strategies, or content-handling features
 without altering the core logic of the server.
+
+\subsection{Implemented Bonus Features}
+
+The server implements three additional features.
+
+\subsubsection{Real-time Web Dashboard}
+A monitoring page is accessible at \texttt{/dashboard.html}.
+\begin{itemize}
+    \item \textbf{Backend:} A dedicated API endpoint (\texttt{/api/stats}) was created. Unlike standard file requests, this endpoint bypasses the disk cache and reads directly from the global \texttt{server\_stats\_t} structure in POSIX Shared Memory. 
+    \item \textbf{Frontend:} A responsive HTML and JavaScript interface polls this API asynchronously every 2 seconds, rendering live charts of throughput, latency, and cache efficiency without requiring a page reload. We also used Tailwind CSS and Shadcn UI.
+\end{itemize}
+
+\subsubsection{HTTP Keep-Alive}
+The server supports persistent connections, controlled by the \texttt{TIMEOUT\_SECONDS} parameter in \texttt{server.conf}.
+\begin{itemize}
+    \item Instead of closing the TCP socket immediately after a response, the worker thread keeps the connection open, waiting for subsequent requests from the same client.
+    \item This reduces the overhead of TCP handshakes (SYN/ACK) and is essential for high-performance scenarios, as demonstrated in the Performance Analysis section.
+\end{itemize}
+
+\subsubsection{Range Requests / Partial Content}
+To support media streaming and download resumption, the server implements \texttt{HTTP 206 Partial Content}.
+\begin{itemize}
+    \item The HTTP parser detects the \texttt{Range: bytes=x-y} header.
+    \item The file reader uses \texttt{fseek()} to jump to the requested offset and serves only the specific byte chunk.
+    \item The builder constructs the appropriate \texttt{Content-Range} header, allowing clients (like video players) to buffer content efficiently.
+\end{itemize}
+
 % ----------------------------------------------------------------------
 % 3. Challenges and Solutions
 % ----------------------------------------------------------------------
