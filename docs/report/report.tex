@@ -830,4 +830,20 @@ Interestingly, the benchmarks show that non-keep-alive connections achieve highe
 % Does the server meet all requirements?
 % Future Work (e.g., Keep-Alive, SSL).
 
+\section{Conclusion}
+
+This project successfully achieved the implementation of a concurrent HTTP web server in C.
+We combined the isolation benefits of multi-processing with the efficiency of multi-threading.
+
+\paragraph{Achievements and Compliance.}
+The server meets all mandatory requirements proposed in the proposal.
+It handles static file serving, enforces synchronization using \textbf{POSIX Semaphores} and \textbf{Mutexes}, and guarantees data consistency across shared memory regions.
+Testing with \texttt{ApacheBench} and \texttt{Valgrind} confirmed the system's stability under load, proving the absence of deadlocks, race conditions, and memory leaks.
+
+\paragraph{Advanced Features.}
+Going beyond the basic specifications, the system integrates advanced features found in production-grade servers.
+The implementation of \textbf{HTTP Keep-Alive} and \textbf{Range Requests} improves the experience for persistent browsing and media streaming.
+Furthermore, the \textbf{Real-time Web Dashboard} demonstrates the versatility of the shared memory architecture.
+
+In conclusion, this project provided deep insights into system programming, particularly in the areas of IPC, concurrency control, and network protocol implementation.
 \end{document}
