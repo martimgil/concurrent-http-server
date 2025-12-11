@@ -424,7 +424,6 @@ A monitoring page is accessible at \texttt{/dashboard.html}.
 The server supports persistent connections, controlled by the \texttt{TIMEOUT\_SECONDS} parameter in \texttt{server.conf}.
 \begin{itemize}
     \item Instead of closing the TCP socket immediately after a response, the worker thread keeps the connection open, waiting for subsequent requests from the same client.
-    \item This reduces the overhead of TCP handshakes (SYN/ACK) and is essential for high-performance scenarios, as demonstrated in the Performance Analysis section.
 \end{itemize}
 
 \subsubsection{Range Requests / Partial Content}
