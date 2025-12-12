@@ -51,3 +51,9 @@ make test
 ## Authors
 - Martim Gil (124833)
 - Nuno Leite Faria (112994)
+
+
+## References
+[1] D. Farolino. (n.d.). domfarolino/4293951bd95082125f2b9931cab1de40 [Gist]. Available: https://gist.github.com/domfarolino/4293951bd95082125f2b9931cab1de40. [Accessed: Dec. 12, 2025].
+
+[2] NGINX. (n.d.). nginx/nginx: The official NGINX Open Source repository. [GitHub Repository]. Available: https://github.com/nginx/nginx. [Accessed: Dec. 12, 2025].

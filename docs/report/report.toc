@@ -22,7 +22,7 @@
 \contentsline {paragraph}{Resource Cleanup.}{7}{Item.9}%
 \contentsline {subsection}{\numberline {2.5}HTTP Processing}{7}{subsection.2.5}%
 \contentsline {paragraph}{Request Handling.}{7}{subsection.2.5}%
-\contentsline {paragraph}{Response Generation.}{7}{subsection.2.5}%
+\contentsline {paragraph}{Response Generation.}{8}{subsection.2.5}%
 \contentsline {paragraph}{Error Responses.}{8}{subsection.2.5}%
 \contentsline {paragraph}{Performance and Extensibility.}{8}{subsection.2.5}%
 \contentsline {subsection}{\numberline {2.6}Implemented Bonus Features}{8}{subsection.2.6}%
@@ -34,43 +34,40 @@
 \contentsline {paragraph}{Problem Observation.}{9}{subsection.3.1}%
 \contentsline {paragraph}{Solution.}{9}{subsection.3.1}%
 \contentsline {paragraph}{Verification.}{9}{subsection.3.1}%
-\contentsline {subsection}{\numberline {3.2}Memory Management and Leaks}{9}{subsection.3.2}%
+\contentsline {subsection}{\numberline {3.2}Memory Management and Leaks}{10}{subsection.3.2}%
 \contentsline {paragraph}{Leak Detection with Valgrind.}{10}{subsection.3.2}%
 \contentsline {paragraph}{Shared Memory and Semaphore Cleanup.}{10}{subsection.3.2}%
-\contentsline {paragraph}{Signal-Driven Resource Management.}{10}{subsection.3.2}%
-\contentsline {paragraph}{Verification and Stability.}{10}{subsection.3.2}%
 \contentsline {paragraph}{Signal-Driven Resource Management.}{10}{subsection.3.2}%
 \contentsline {paragraph}{Verification and Stability.}{10}{subsection.3.2}%
 \contentsline {subsection}{\numberline {3.3}Log Synchronization}{11}{subsection.3.3}%
 \contentsline {paragraph}{Problem Analysis.}{11}{subsection.3.3}%
 \contentsline {paragraph}{Implemented Solution.}{11}{subsection.3.3}%
 \contentsline {paragraph}{Example Implementation.}{11}{subsection.3.3}%
-\contentsline {paragraph}{Verification.}{12}{Item.14}%
+\contentsline {paragraph}{Verification.}{11}{Item.14}%
 \contentsline {subsection}{\numberline {3.4}Zombies and Signals}{12}{subsection.3.4}%
 \contentsline {paragraph}{Problem Description.}{12}{subsection.3.4}%
 \contentsline {paragraph}{Implemented Solution.}{12}{subsection.3.4}%
 \contentsline {paragraph}{Graceful Shutdown Signals.}{12}{subsection.3.4}%
-\contentsline {paragraph}{Verification.}{13}{subsection.3.4}%
+\contentsline {paragraph}{Verification.}{12}{subsection.3.4}%
 \contentsline {section}{\numberline {4}Testing Methodology}{13}{section.4}%
 \contentsline {subsection}{\numberline {4.1}Functional Tests}{13}{subsection.4.1}%
 \contentsline {paragraph}{HTTP Response Validation.}{13}{subsection.4.1}%
 \contentsline {paragraph}{Automated Makefile Integration.}{13}{subsection.4.1}%
 \contentsline {paragraph}{Verification of MIME Type Handling.}{13}{subsection.4.1}%
-\contentsline {paragraph}{Result Summary.}{14}{subsection.4.1}%
+\contentsline {paragraph}{Result Summary.}{13}{subsection.4.1}%
 \contentsline {subsection}{\numberline {4.2}Concurrency and Stress Tests}{14}{subsection.4.2}%
 \contentsline {paragraph}{Automated Concurrency Validation.}{14}{subsection.4.2}%
 \contentsline {paragraph}{Load Testing with Apache Bench.}{14}{subsection.4.2}%
 \contentsline {paragraph}{Race Detection with Helgrind and ThreadSanitizer.}{14}{subsection.4.2}%
 \contentsline {paragraph}{Stress and Stability Evaluation.}{14}{subsection.4.2}%
-\contentsline {section}{\numberline {5}Performance Analysis}{15}{section.5}%
-\contentsline {subsection}{\numberline {5.1}Test Environment}{15}{subsection.5.1}%
+\contentsline {section}{\numberline {5}Performance Analysis}{14}{section.5}%
+\contentsline {subsection}{\numberline {5.1}Test Environment}{14}{subsection.5.1}%
 \contentsline {subsection}{\numberline {5.2}Results: Throughput}{15}{subsection.5.2}%
 \contentsline {subsection}{\numberline {5.3}Results: Latency}{16}{subsection.5.3}%
-\contentsline {subsection}{\numberline {5.4}Discussion of Results}{17}{subsection.5.4}%
-\contentsline {paragraph}{Throughput Analysis.}{17}{subsection.5.4}%
-\contentsline {paragraph}{Latency Behavior.}{17}{subsection.5.4}%
+\contentsline {subsection}{\numberline {5.4}Discussion of Results}{16}{subsection.5.4}%
+\contentsline {paragraph}{Throughput Analysis.}{16}{subsection.5.4}%
+\contentsline {paragraph}{Latency Behavior.}{16}{subsection.5.4}%
 \contentsline {paragraph}{Keep-Alive Trade-offs.}{17}{subsection.5.4}%
 \contentsline {section}{\numberline {6}Conclusion}{17}{section.6}%
-\contentsline {section}{\numberline {7}Conclusion}{17}{section.7}%
-\contentsline {paragraph}{Achievements and Compliance.}{18}{section.7}%
-\contentsline {paragraph}{Advanced Features.}{18}{section.7}%
+\contentsline {paragraph}{Achievements and Compliance.}{17}{section.6}%
+\contentsline {paragraph}{Advanced Features.}{17}{section.6}%

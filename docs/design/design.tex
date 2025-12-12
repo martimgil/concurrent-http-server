@@ -104,7 +104,7 @@
     
     % --- Course Information ---
     {\Large\textbf{Operating Systems}}\\[0.3cm]
-    {\large Academic Year 2024/2025}
+    {\large Academic Year 2025/2026}
     
     \vspace{2cm}
     
@@ -267,7 +267,7 @@
     
     \begin{lstlisting}[language=C]
     typedef struct {
-        request_queue_t queue;   // Connection queue
+        connection_queue_t queue;   // Connection queue
         server_stats_t  stats;   // Global statistics
     } shared_data_t;
     \end{lstlisting}
@@ -553,7 +553,28 @@
     The server implements a dedicated API endpoint at \texttt{/api/stats}. 
     Unlike static file serving, this endpoint bypasses the disk cache and reads directly from the global \texttt{server\_stats\_t} structure in shared memory.
 
-    The architecture supports a JavaScript-based dashboard (\texttt{dashboard.html}) that polls this endpoint, rendering real-time graphs of throughput and latency. 
+    \paragraph{JSON Response Format.}\mbox{}\\[-0.2\baselineskip]
+    The \texttt{/api/stats} endpoint returns a JSON object with the following structure:
+    \begin{lstlisting}[language=C]
+    {
+      "total_requests": <long>,
+      "bytes_transferred": <long>,
+      "avg_response_time_ms": <double>,
+      "active_connections": <int>,
+      "status_codes": { "200": <long>, "404": <long>, "500": <long> },
+      "cache": { "hits": <size_t>, "misses": <size_t>, "hit_rate": <double> }
+    }
+    \end{lstlisting}
+
+    \paragraph{Frontend Technologies.}\mbox{}\\[-0.2\baselineskip]
+    The dashboard (\texttt{www/dashboard.html}) is a self-contained HTML page that uses:
+    \begin{itemize}
+      \item \textbf{TailwindCSS} (via CDN) for responsive dark-themed styling.
+      \item \textbf{Chart.js} (via CDN) for rendering real-time line charts of requests per second.
+      \item Inline JavaScript that polls \texttt{/api/stats} every 2 seconds asynchronously.
+    \end{itemize}
+
+    The dashboard displays live metrics including total requests, data transferred, average response time, active connections, HTTP status code distribution, and cache performance (hits, misses, hit rate).
     
     % ----------------------------------------------------------------------
     % 5. SYSTEM LIFECYCLE
@@ -595,7 +616,6 @@
     % 6. DIAGRAMS
     % ----------------------------------------------------------------------
     \section{Flowcharts}
-    % [Instruction: Add required flowcharts here]
     
 \begin{figure}[H]
     \centering

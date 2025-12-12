@@ -1,5 +1,5 @@
 # Fdb version 4
-["pdflatex"] 1765449541.76514 "/home/martimgil/Documents/Trabalho2_SO/docs/report/report.tex" "report.pdf" "report" 1765449542.56903 0
+["pdflatex"] 1765542256.10336 "/home/martimgil/Documents/Trabalho2_SO/docs/report/report.tex" "report.pdf" "report" 1765542259.64083 0
   "/etc/texmf/web2c/texmf.cnf" 1763149566.21733 475 c0e671620eb5563b2130f56340a5fde8 ""
   "/home/martimgil/.texlive2023/texmf-var/fonts/pk/ljfour/jknappen/ec/ecbx1095.600pk" 1764952139.97334 28952 570cba24da69c55f7b041efc5a2ffc59 ""
   "/home/martimgil/.texlive2023/texmf-var/fonts/pk/ljfour/jknappen/ec/ecbx1200.600pk" 1763217169.61609 31928 0eddabbfb4216a4571d86e6afc225d07 ""
@@ -14,7 +14,7 @@
   "/home/martimgil/.texlive2023/texmf-var/fonts/pk/ljfour/jknappen/ec/ecti1200.600pk" 1765134446.22889 39096 e01c3efa485c33ebb103bf4150a1b4db ""
   "/home/martimgil/.texlive2023/texmf-var/fonts/pk/ljfour/jknappen/ec/ectt1200.600pk" 1764868430.52514 24132 8d0ce80232d1d84b561844f407a24090 ""
   "/home/martimgil/.texlive2023/texmf-var/fonts/pk/ljfour/jknappen/ec/tcrm1200.600pk" 1764865327.04232 14040 ce399ac02a679feb3971e462ba61d109 ""
-  "/home/martimgil/Documents/Trabalho2_SO/docs/report/report.tex" 1765449541.58029 48066 84e9886fea46fe368973549863161454 ""
+  "/home/martimgil/Documents/Trabalho2_SO/docs/report/report.tex" 1765542252.19517 47454 3aa9bd7c842c765eaf7a6f9de5786215 ""
   "/usr/share/texlive/texmf-dist/fonts/map/fontname/texfonts.map" 1577235249 3524 cb3e574dea2d1052e39280babc910dc8 ""
   "/usr/share/texlive/texmf-dist/fonts/tfm/jknappen/ec/ecbx1095.tfm" 1136768653 3584 21b378cca2e40816b0e6d74a4dc98f04 ""
   "/usr/share/texlive/texmf-dist/fonts/tfm/jknappen/ec/ecbx1200.tfm" 1136768653 3584 402da0b29eafbad07963b1224b222f18 ""
@@ -218,10 +218,10 @@
   "/var/lib/texmf/fonts/map/pdftex/updmap/pdftex.map" 1763472103.96559 128028 f533b797fba58d231669ea19e894e23e ""
   "/var/lib/texmf/web2c/pdftex/pdflatex.fmt" 1763472148 6800791 1c533c7e200f5e0a86a8ad65ae6604e3 ""
   "deti.png" 1765381140.98642 17687 bcd6fa2317ac507a619b1cd446dc142c ""
-  "report.aux" 1765449542.49479 9815 125010d730873ad962c3649960979f72 "pdflatex"
-  "report.out" 1765449542.49579 4220 d2813a5a9a149a4069458d2a112f67c9 "pdflatex"
-  "report.tex" 1765449541.58029 48066 84e9886fea46fe368973549863161454 ""
-  "report.toc" 1765449542.49647 5810 00d5b95fd977a1304f31cf29c52bf2d1 "pdflatex"
+  "report.aux" 1765542259.33004 9467 72108d2c344c45076b3abe9f778ae6b4 "pdflatex"
+  "report.out" 1765542259.33504 4126 4b760402718613669d4aa17094618c9b "pdflatex"
+  "report.tex" 1765542252.19517 47454 3aa9bd7c842c765eaf7a6f9de5786215 ""
+  "report.toc" 1765542259.33504 5585 9bcfc164a59f411cfee07b1350e6b2e1 "pdflatex"
   (generated)
   "report.aux"
   "report.log"

@@ -200,15 +200,16 @@ The Diagram below shows the structure:
     \begin{itemize}
       \item README.md
       \item stress\_test.sh
-      \item test\_cache
       \item test\_concurrent.c
-      \item test\_load.sh
+      \item stress\_client.c
       \item test\_suite.sh
     \end{itemize}
     \item \textbf{www/} - Static web content served by the HTTP server
     \begin{itemize}
+      \item dashboard.html - Real-time statistics dashboard (Bonus Feature)
       \item index.html, style.css, script.js, script.ts
       \item image.png, doc.pdf
+      \item images/ - Image assets directory
       \item errors/ - Error pages (404.html, 500.html)
     \end{itemize}
     \item \textbf{bin/} - Generated during compilation (created by Makefile)
@@ -221,10 +222,10 @@ The Diagram below shows the structure:
 
 \subsection{System Architecture}
 
-This project is made of three main execution entities: the \textbf{master process}, the \textbf{worker threads}, and the \textbf{auxiliary tools}.  
-The master process is responsible for system initialization, socket setup, configuration parsing, and coordination of shared resources.  
-Each worker thread, which is managed by a thread pool, is tasked with handling a specific client connection.  
-Auxiliary programs, such as \texttt{stats\_reader}, interact with  the server's shared memory region to show runtime statistics without interfering with normal operation.
+This project is made of three main execution entities: the \textbf{master process}, the \textbf{worker processes}, and the \textbf{auxiliary tools}.  
+The master process is responsible for system initialization, socket setup, configuration parsing, coordination of shared resources, and forking worker processes.  
+Each worker process maintains its own thread pool, where individual threads handle client connections concurrently.  
+Auxiliary programs, such as \texttt{stats\_reader}, interact with the server's shared memory region to show runtime statistics without interfering with normal operation.
 
 The core modules are summarized below:
 
@@ -490,12 +491,6 @@ These routines perform the following actions:
 To guarantee cleanup even in the case of user interruption, the master process installs custom signal handlers for \texttt{SIGINT} and \texttt{SIGTERM}.  
 When triggered, these handlers invoke a global \texttt{cleanup()} function that sequentially joins all worker threads, destroys synchronization objects, releases cache memory, and removes shared memory objects from the system.  
 This ensures a graceful shutdown sequence, preventing resource leakage even under abrupt termination scenarios.
-
-\paragraph{Verification and Stability.}
-Memory management played a crucial role, because the system relies on dynamic memory allocation, shared memory segments, and synchronization primitives created at runtime.
-\paragraph{Signal-Driven Resource Management.}
-To guarantee cleanup even in the event of user interruption, the master process installs custom signal handlers for \texttt{SIGINT} and \texttt{SIGTERM}.  
-When triggered, these handlers invoke a global \texttt{cleanup()} function that joins all worker threads and execute a cleanup to destroy all objects and release all resources, which prevents resource leakage.
 
 \paragraph{Verification and Stability.}
 After the integration of the cleanup logic, repeated Valgrind analyses confirmed that all heap allocations were correctly released, with the final summary reporting:

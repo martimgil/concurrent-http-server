@@ -14,7 +14,7 @@ shared_data_t* __attribute__((no_sanitize("thread"))) create_shared_memory(int q
     // shm_fd -> File descriptor for the shared memory object
     // shm_open -> Create or open a shared memory object
     // O_CREAT | O_RDWR -> Create if it doesn't exist, open for reading and writing
-    // 0666 -> Permissions for the shared memory -> rw-rw-rw- -> https://superuser.com/questions/295591/what-is-the-meaning-of-chmod-666
+    // 0666 -> Permissions for the shared memory -> rw-rw-rw- 
 
     int shm_fd = shm_open(SHM_NAME, O_CREAT | O_RDWR, 0666);
 
