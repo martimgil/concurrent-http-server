@@ -1,5 +1,5 @@
 # Fdb version 4
-["pdflatex"] 1765447067.73143 "/home/martimgil/Documents/Trabalho2_SO/docs/design/design.tex" "design.pdf" "design" 1765447070.45706 0
+["pdflatex"] 1765573786.08437 "/home/martimgil/Documents/Trabalho2_SO/docs/design/design.tex" "design.pdf" "design" 1765573787.40223 0
   "/etc/texmf/web2c/texmf.cnf" 1763149566.21733 475 c0e671620eb5563b2130f56340a5fde8 ""
   "/home/martimgil/.texlive2023/texmf-var/fonts/pk/ljfour/jknappen/ec/ecbx1095.600pk" 1764952139.97334 28952 570cba24da69c55f7b041efc5a2ffc59 ""
   "/home/martimgil/.texlive2023/texmf-var/fonts/pk/ljfour/jknappen/ec/ecbx1200.600pk" 1763217169.61609 31928 0eddabbfb4216a4571d86e6afc225d07 ""
@@ -17,7 +17,7 @@
   "/home/martimgil/.texlive2023/texmf-var/fonts/pk/ljfour/jknappen/ec/ectt1095.600pk" 1764868430.06414 21952 ae00fb146493e207ba436b71d56b965a ""
   "/home/martimgil/.texlive2023/texmf-var/fonts/pk/ljfour/jknappen/ec/ectt1200.600pk" 1764868430.52514 24132 8d0ce80232d1d84b561844f407a24090 ""
   "/home/martimgil/.texlive2023/texmf-var/fonts/pk/ljfour/jknappen/ec/tcrm1200.600pk" 1764865327.04232 14040 ce399ac02a679feb3971e462ba61d109 ""
-  "/home/martimgil/Documents/Trabalho2_SO/docs/design/design.tex" 1765447067.13255 28971 ef2062043a4e9450c3280d668b6ad2c1 ""
+  "/home/martimgil/Documents/Trabalho2_SO/docs/design/design.tex" 1765542347.97214 29946 908115eaaf1a29bdd42ecbc978cf9617 ""
   "/usr/share/texlive/texmf-dist/fonts/map/fontname/texfonts.map" 1577235249 3524 cb3e574dea2d1052e39280babc910dc8 ""
   "/usr/share/texlive/texmf-dist/fonts/tfm/jknappen/ec/ecbx1095.tfm" 1136768653 3584 21b378cca2e40816b0e6d74a4dc98f04 ""
   "/usr/share/texlive/texmf-dist/fonts/tfm/jknappen/ec/ecbx1200.tfm" 1136768653 3584 402da0b29eafbad07963b1224b222f18 ""
@@ -198,10 +198,10 @@
   "/usr/share/texmf/web2c/texmf.cnf" 1707919699 40399 f2c302f7d2af602abb742093540a5834 ""
   "/var/lib/texmf/fonts/map/pdftex/updmap/pdftex.map" 1763472103.96559 128028 f533b797fba58d231669ea19e894e23e ""
   "/var/lib/texmf/web2c/pdftex/pdflatex.fmt" 1763472148 6800791 1c533c7e200f5e0a86a8ad65ae6604e3 ""
-  "design.aux" 1765447070.18153 5257 985bd8abaadd6c4633aeb0914eac9427 "pdflatex"
-  "design.out" 1765447070.18553 3823 2aabdb45daab503ddda6e02c331ad433 "pdflatex"
-  "design.tex" 1765447067.13255 28971 ef2062043a4e9450c3280d668b6ad2c1 ""
-  "design.toc" 1765447070.18553 2656 e2803b3e4e3e60c783f2d0a010bfe344 "pdflatex"
+  "design.aux" 1765573787.27847 5480 6bec8ae539cc3a87edb1ec786de64386 "pdflatex"
+  "design.out" 1765573787.28047 3823 2aabdb45daab503ddda6e02c331ad433 "pdflatex"
+  "design.tex" 1765542347.97214 29946 908115eaaf1a29bdd42ecbc978cf9617 ""
+  "design.toc" 1765573787.28047 2797 bd44323fc2034ecc211d30aeeb2c7515 "pdflatex"
   "deti.png" 1765444685.56966 17687 bcd6fa2317ac507a619b1cd446dc142c ""
   (generated)
   "design.aux"
